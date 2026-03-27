@@ -1,0 +1,191 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── CSS variables (adaptive light/dark values) ────────────────────────────── */
+:root {
+  --neu-bg:          #E0E5EC;
+  --neu-fg:          #3D4852;
+  --neu-muted:       #6B7280;
+  --dropdown-bg:     #D4D9E2;
+  --shadow-out:      9px 9px 16px rgb(163,177,198,0.6), -9px -9px 16px rgba(255,255,255,0.5);
+  --shadow-out-sm:   5px 5px 10px rgb(163,177,198,0.6), -5px -5px 10px rgba(255,255,255,0.5);
+  --shadow-out-lg:   12px 12px 20px rgb(163,177,198,0.7), -12px -12px 20px rgba(255,255,255,0.6);
+  --shadow-in:       inset 6px 6px 10px rgb(163,177,198,0.6), inset -6px -6px 10px rgba(255,255,255,0.5);
+  --shadow-in-lg:    inset 10px 10px 20px rgb(163,177,198,0.7), inset -10px -10px 20px rgba(255,255,255,0.6);
+  --shadow-in-sm:    inset 3px 3px 6px rgb(163,177,198,0.6), inset -3px -3px 6px rgba(255,255,255,0.5);
+}
+
+.dark {
+  --neu-bg:          #1E293B;
+  --neu-fg:          #E2E8F0;
+  --neu-muted:       #94A3B8;
+  --dropdown-bg:     #0F172A;
+  --shadow-out:      9px 9px 16px rgba(0,0,0,0.55), -9px -9px 16px rgba(255,255,255,0.04);
+  --shadow-out-sm:   5px 5px 10px rgba(0,0,0,0.5),  -5px -5px 10px rgba(255,255,255,0.04);
+  --shadow-out-lg:   12px 12px 20px rgba(0,0,0,0.6),-12px -12px 20px rgba(255,255,255,0.05);
+  --shadow-in:       inset 6px 6px 10px rgba(0,0,0,0.5),  inset -6px -6px 10px rgba(255,255,255,0.03);
+  --shadow-in-lg:    inset 10px 10px 20px rgba(0,0,0,0.55),inset -10px -10px 20px rgba(255,255,255,0.03);
+  --shadow-in-sm:    inset 3px 3px 6px rgba(0,0,0,0.45),  inset -3px -3px 6px rgba(255,255,255,0.03);
+}
+
+/* ── Base resets ───────────────────────────────────────────────────────────── */
+@layer base {
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-neu-base text-neu-fg font-body antialiased;
+    min-height: 100vh;
+  }
+
+  #root {
+    min-height: 100vh;
+  }
+}
+
+/* ── Reusable neumorphic component classes ─────────────────────────────────── */
+@layer components {
+
+  /* Input — inset into the surface */
+  .neu-input {
+    @apply w-full bg-neu-base rounded-neu-sm px-4 py-3
+           text-neu-fg text-[0.95rem] font-body
+           shadow-neu-in outline-none
+           placeholder-[#A0AEC0]
+           transition-shadow duration-300 ease-out;
+  }
+  .neu-input:focus {
+    box-shadow: inset 10px 10px 20px rgb(163,177,198,0.7),
+                inset -10px -10px 20px rgba(255,255,255,0.6);
+    outline: 2px solid rgba(108, 99, 255, 0.45);
+    outline-offset: 2px;
+  }
+
+  /* Primary button — violet, extruded */
+  .neu-btn-primary {
+    @apply w-full bg-neu-accent text-white font-bold rounded-neu-sm
+           py-3.5 text-[0.9rem] tracking-[0.3px]
+           shadow-neu-out
+           transition-all duration-300 ease-out
+           hover:-translate-y-px hover:bg-neu-accent-lt hover:shadow-neu-out-lg
+           active:translate-y-0.5 active:shadow-neu-btn-active
+           focus-visible:outline-2 focus-visible:outline-neu-accent focus-visible:outline-offset-2;
+  }
+
+  /* Secondary button — grey surface, extruded */
+  .neu-btn-secondary {
+    @apply w-full bg-neu-base text-neu-muted font-semibold rounded-neu-sm
+           py-3.5 text-[0.9rem]
+           shadow-neu-out-sm
+           transition-all duration-300 ease-out
+           hover:-translate-y-px hover:shadow-neu-out
+           active:translate-y-0.5 active:shadow-neu-in-sm
+           focus-visible:outline-2 focus-visible:outline-neu-accent focus-visible:outline-offset-2;
+  }
+
+  /* Utility button — compact, no fixed width */
+  .neu-btn {
+    @apply bg-neu-base text-neu-muted font-semibold rounded-neu-sm
+           shadow-neu-out-sm
+           transition-all duration-300 ease-out
+           hover:-translate-y-px hover:shadow-neu-out hover:text-neu-fg
+           active:translate-y-0.5 active:shadow-neu-in-sm;
+  }
+
+  /* Card — extruded from the base surface */
+  .neu-card {
+    @apply bg-neu-base rounded-neu shadow-neu-out;
+  }
+
+  /* Small card — for stat tiles, badge chips */
+  .neu-card-sm {
+    @apply bg-neu-base rounded-neu-sm shadow-neu-out-sm;
+  }
+
+  /* Inset well — for icon containers, OTP instructions */
+  .neu-well {
+    @apply bg-neu-base rounded-neu-sm shadow-neu-in;
+  }
+
+  /* Step badge pill — small inset pill label */
+  .neu-badge {
+    @apply inline-flex items-center bg-neu-base rounded-full
+           px-3 py-1 text-[0.59rem] font-bold uppercase tracking-[2px]
+           text-neu-accent shadow-neu-in-sm;
+  }
+}
+
+/* ── Dark mode overrides ───────────────────────────────────────────────────── */
+
+/* Body + root background */
+.dark body { background-color: #1E293B; color: #E2E8F0; }
+
+/* Override Tailwind color utilities */
+.dark .bg-neu-base   { background-color: #1E293B !important; }
+.dark .text-neu-fg   { color: #E2E8F0 !important; }
+.dark .text-neu-muted { color: #94A3B8 !important; }
+
+/* Override shadow utilities */
+.dark .shadow-neu-out    { box-shadow: var(--shadow-out)    !important; }
+.dark .shadow-neu-out-sm { box-shadow: var(--shadow-out-sm) !important; }
+.dark .shadow-neu-out-lg { box-shadow: var(--shadow-out-lg) !important; }
+.dark .shadow-neu-in     { box-shadow: var(--shadow-in)     !important; }
+.dark .shadow-neu-in-lg  { box-shadow: var(--shadow-in-lg)  !important; }
+.dark .shadow-neu-in-sm  { box-shadow: var(--shadow-in-sm)  !important; }
+
+/* Override component classes */
+.dark .neu-input {
+  background-color: #1E293B;
+  color: #E2E8F0;
+  box-shadow: var(--shadow-in);
+}
+.dark .neu-input:focus {
+  box-shadow: var(--shadow-in-lg);
+}
+.dark .neu-input::placeholder { color: #475569; }
+
+.dark .neu-card {
+  background-color: #1E293B;
+  box-shadow: var(--shadow-out);
+}
+.dark .neu-card-sm {
+  background-color: #1E293B;
+  box-shadow: var(--shadow-out-sm);
+}
+.dark .neu-well {
+  background-color: #1E293B;
+  box-shadow: var(--shadow-in);
+}
+.dark .neu-badge {
+  background-color: #1E293B;
+  box-shadow: var(--shadow-in-sm);
+}
+.dark .neu-btn-secondary {
+  background-color: #1E293B;
+  color: #94A3B8;
+  box-shadow: var(--shadow-out-sm);
+}
+.dark .neu-btn-secondary:hover {
+  box-shadow: var(--shadow-out);
+  color: #E2E8F0;
+}
+.dark .neu-btn {
+  background-color: #1E293B;
+  color: #94A3B8;
+  box-shadow: var(--shadow-out-sm);
+}
+.dark .neu-btn:hover {
+  box-shadow: var(--shadow-out);
+  color: #E2E8F0;
+}
+
+/* Border and separator colors in dark mode */
+.dark .border-\[rgba\(163\,177\,198\,0\.3\)\] { border-color: rgba(255,255,255,0.08) !important; }
+.dark .border-\[rgba\(163\,177\,198\,0\.15\)\] { border-color: rgba(255,255,255,0.06) !important; }
+.dark .border-white\/5 { border-color: rgba(255,255,255,0.08) !important; }

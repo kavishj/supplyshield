@@ -1,0 +1,165 @@
+import sys
+from pathlib import Path
+_ROOT = Path(__file__).resolve().parents[2]
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+from config import (COUNTRY_RISK, DEFAULT_WEIGHTS, ONBOARDED_WEIGHTS,
+                    HIGH_THRESHOLD, MEDIUM_THRESHOLD)
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+import time, logging
+from typing import Optional
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("riskcalc")
+
+app = FastAPI(title="RiskCalculatorAgent", version="3.0.0")
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+NEWS_RISK_MAP       = {"HIGH": 0.8, "MEDIUM": 0.4, "LOW": 0.1, "NONE": 0.0}
+FINANCIAL_HEALTH_MAP = {"Poor": 0.85, "Fair": 0.45, "Good": 0.05}
+TIER_RISK_MAP       = {"Tier 1": 0.0, "Tier 2": 0.3, "Tier 3": 0.6}
+
+
+def _lead_time_score(weeks: float) -> float:
+    if weeks <= 0:  return 0.0   # invalid / unknown — no penalty
+    if weeks <= 8:  return 0.0
+    if weeks <= 16: return 0.5 * (weeks - 8) / 8
+    return min(1.0, 0.5 + (weeks - 16) / 32)
+
+
+def _on_time_score(rate: float) -> float:
+    """0-100% rate → 0.0–1.0 risk (lower on-time = higher risk)."""
+    rate = max(0.0, min(100.0, rate))   # clamp to valid range
+    if rate >= 95: return 0.0
+    if rate >= 85: return 0.2
+    if rate >= 70: return 0.5
+    return 0.85
+
+
+def _contract_expiry_score(days_remaining: Optional[int]) -> float:
+    if days_remaining is None: return 0.0
+    if days_remaining <= 30:   return 0.90
+    if days_remaining <= 90:   return 0.55
+    if days_remaining <= 180:  return 0.25
+    return 0.0
+
+
+def _normalise_weights(w: dict) -> dict:
+    """Ensure weights sum to 1.0. Falls back to DEFAULT_WEIGHTS if all zero."""
+    total = sum(w.values())
+    if total == 0:
+        logger.warning("All custom weights are zero — falling back to DEFAULT_WEIGHTS")
+        return dict(DEFAULT_WEIGHTS)
+    return {k: v / total for k, v in w.items()}
+
+
+class ScoreRequest(BaseModel):
+    ofac_status:           str
+    country:               Optional[str]   = None
+    geo_concentration:     float           = 0.5
+    single_source:         bool            = False
+    lead_time_weeks:       float           = 12.0
+    news_risk:             str             = "NONE"
+    # Custom weights (from analysis form — override defaults if provided)
+    custom_weights:        Optional[dict]  = None
+    # Extended onboarded-supplier fields
+    financial_health:      Optional[str]   = None   # Good / Fair / Poor
+    on_time_delivery_rate: Optional[float] = None   # 0–100 %
+    contract_days_remaining: Optional[int] = None   # days until expiry
+    tier_level:            Optional[str]   = None   # Tier 1 / 2 / 3
+
+
+@app.get("/health")
+def health():
+    return {
+        "agent":            "RiskCalculatorAgent",
+        "status":           "healthy",
+        "default_weights":  DEFAULT_WEIGHTS,
+        "onboarded_weights": ONBOARDED_WEIGHTS,
+        "version":          "3.0.0",
+    }
+
+
+@app.post("/score")
+def score(req: ScoreRequest):
+    start = time.perf_counter()
+
+    # ── Base component scores ──────────────────────────────────
+    geo_score  = (COUNTRY_RISK.get(req.country.upper().strip(), req.geo_concentration)
+                  if req.country else req.geo_concentration)
+    geo_score  = max(0.0, min(1.0, geo_score))   # clamp in case geo_concentration out of range
+    news_score = NEWS_RISK_MAP.get((req.news_risk or "NONE").upper(), 0.0)
+
+    components = {
+        "ofac":          1.0 if req.ofac_status == "SANCTIONED" else 0.0,
+        "geography":     geo_score,
+        "news":          news_score,
+        "single_source": 0.8 if req.single_source else 0.0,
+        "lead_time":     _lead_time_score(req.lead_time_weeks),
+    }
+
+    # ── Determine which weight set to use ─────────────────────
+    has_extended = any([
+        req.financial_health is not None,
+        req.on_time_delivery_rate is not None,
+        req.contract_days_remaining is not None,
+    ])
+
+    if req.custom_weights:
+        # User-supplied weights — normalise and use directly
+        # Support both standard and extended keys
+        raw_weights = {k: float(v) for k, v in req.custom_weights.items() if float(v) > 0}
+        weights = _normalise_weights(raw_weights)
+    elif has_extended:
+        weights = dict(ONBOARDED_WEIGHTS)
+    else:
+        weights = dict(DEFAULT_WEIGHTS)
+
+    # ── Extended onboarded components ─────────────────────────
+    if has_extended or req.custom_weights:
+        if req.financial_health is not None:
+            components["financial_health"] = FINANCIAL_HEALTH_MAP.get(req.financial_health, 0.4)
+        if req.on_time_delivery_rate is not None:
+            components["on_time_delivery"] = _on_time_score(req.on_time_delivery_rate)
+        if req.contract_days_remaining is not None:
+            components["contract_expiry"] = _contract_expiry_score(req.contract_days_remaining)
+
+    # ── Final score ────────────────────────────────────────────
+    score_val = round(
+        min(1.0, sum(components.get(k, 0) * weights.get(k, 0) for k in weights)),
+        4,
+    )
+
+    # Compliance override — sanctioned supplier always HIGH
+    if req.ofac_status == "SANCTIONED":
+        score_val = max(score_val, 0.90)
+
+    if score_val >= HIGH_THRESHOLD:   category = "HIGH"
+    elif score_val >= MEDIUM_THRESHOLD: category = "MEDIUM"
+    else:                               category = "LOW"
+
+    if req.ofac_status == "SANCTIONED":
+        rec = "BLOCK — Supplier on OFAC SDN list. Immediate legal review required."
+    elif category == "HIGH":
+        rec = "ESCALATE — High risk. Requires procurement manager approval."
+    elif category == "MEDIUM":
+        rec = "REVIEW — Medium risk. Enhanced due diligence recommended."
+    else:
+        rec = "APPROVE — Low risk. Standard onboarding applies."
+
+    elapsed = round((time.perf_counter() - start) * 1000, 2)
+    logger.info(f"Scored: {score_val} ({category}) in {elapsed}ms | weights={'onboarded' if has_extended else 'standard'}")
+
+    return {
+        "score":             score_val,
+        "category":          category,
+        "recommendation":    rec,
+        "components":        components,
+        "weights":           weights,
+        "weights_mode":      "custom" if req.custom_weights else ("onboarded" if has_extended else "standard"),
+        "approval_required": score_val >= HIGH_THRESHOLD,
+        "elapsed_ms":        elapsed,
+    }

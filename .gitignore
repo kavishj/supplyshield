@@ -1,0 +1,23 @@
+# Secrets & environment
+.env
+data/auth.json
+
+# Runtime database (generated at runtime)
+data/suppliers.db
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+*.egg-info/
+
+# Frontend build artifacts
+frontend/node_modules/
+frontend/dist/
+node_modules/
+
+# OS
+.DS_Store
+Thumbs.db

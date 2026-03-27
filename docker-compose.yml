@@ -1,0 +1,108 @@
+version: "3.9"
+
+# All Python services share the same build context (project root).
+# Each image copies the full project so config.py and data/ are available.
+# The data/ volume is shared across bff + orchestrator so they use one SQLite DB.
+
+x-python-base: &python-base
+  build:
+    context: .        # always project root
+  restart: unless-stopped
+  env_file: .env
+  volumes:
+    - db-data:/app/data   # shared SQLite + sdn.csv
+
+services:
+
+  # ── Frontend (React build served by nginx, proxies /api/ to BFF) ────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "80:80"
+    depends_on:
+      - bff
+    restart: unless-stopped
+
+  # ── BFF ──────────────────────────────────────────────────────────────────────
+  bff:
+    <<: *python-base
+    build:
+      context: .
+      dockerfile: bff/Dockerfile
+    environment:
+      DB_PATH: /app/data/suppliers.db
+      ORCHESTRATOR_URL: http://orchestrator:8000
+    expose:
+      - "8006"
+
+  # ── Orchestrator ─────────────────────────────────────────────────────────────
+  orchestrator:
+    <<: *python-base
+    build:
+      context: .
+      dockerfile: orchestrator/Dockerfile
+    environment:
+      DB_PATH: /app/data/suppliers.db
+      GEOINTEL_URL:    http://geointel:8001
+      RISKCALC_URL:    http://riskcalc:8002
+      GATE_URL:        http://gate:8003
+      SUMMARIZER_URL:  http://summarizer:8004
+      RECOMMENDER_URL: http://recommender:8005
+    expose:
+      - "8000"
+    depends_on:
+      - geointel
+      - riskcalc
+      - gate
+      - summarizer
+      - recommender
+
+  # ── GeoIntel ─────────────────────────────────────────────────────────────────
+  geointel:
+    <<: *python-base
+    build:
+      context: .
+      dockerfile: services/geointel/Dockerfile
+    expose:
+      - "8001"
+
+  # ── RiskCalc ─────────────────────────────────────────────────────────────────
+  riskcalc:
+    <<: *python-base
+    build:
+      context: .
+      dockerfile: services/riskcalc/Dockerfile
+    expose:
+      - "8002"
+
+  # ── Gate ─────────────────────────────────────────────────────────────────────
+  gate:
+    <<: *python-base
+    build:
+      context: .
+      dockerfile: services/gate/Dockerfile
+    expose:
+      - "8003"
+
+  # ── Summarizer ───────────────────────────────────────────────────────────────
+  summarizer:
+    <<: *python-base
+    build:
+      context: .
+      dockerfile: services/summarizer/Dockerfile
+    expose:
+      - "8004"
+
+  # ── Recommender ──────────────────────────────────────────────────────────────
+  recommender:
+    <<: *python-base
+    build:
+      context: .
+      dockerfile: services/recommender/Dockerfile
+    expose:
+      - "8005"
+
+volumes:
+  db-data:   # named volume — persists suppliers.db and sdn.csv across restarts
