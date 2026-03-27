@@ -9,10 +9,10 @@ Usage:
     python seed_demo_data.py
 """
 
-import sqlite3
+import sqlite3, os
 from pathlib import Path
 
-DB_PATH = Path(r"C:\Users\KAVISH\supplyshield_final\data\suppliers.db")
+DB_PATH = Path(os.getenv("DB_PATH", r"C:\Users\KAVISH\supplyshield_final\data\suppliers.db"))
 
 # ── Company Profile ────────────────────────────────────────────────────────────
 COMPANY_PROFILE = {
