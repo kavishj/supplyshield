@@ -17,8 +17,8 @@ from newsapi import NewsApiClient
 from dotenv import load_dotenv
 
 SERPER_URL  = "https://google.serper.dev/search"
-HF_API_URL  = "https://router.huggingface.co/v1/chat/completions"
-HF_MODEL    = "Qwen/Qwen2.5-7B-Instruct:together"
+GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
+GROQ_MODEL   = "llama-3.3-70b-versatile"
 
 load_dotenv(r"C:\Users\KAVISH\supplyshield_final\.env", override=False)
 
@@ -85,11 +85,11 @@ def _serper_search(query: str, num: int = 5) -> list:
 
 def _extract_shareholders_via_llm(company_name: str, snippets: list) -> list:
     """
-    Call HuggingFace LLM to extract shareholder names and ownership percentages
+    Call Groq LLM to extract shareholder names and ownership percentages
     from web search snippets.
     Returns list of {"name": str, "ownership_pct": float}
     """
-    token = os.getenv("HUGGINGFACE_API_TOKEN", "").strip()
+    token = os.getenv("GROQ_API_KEY", "").strip()
     if not token or not snippets:
         return []
 
@@ -114,10 +114,10 @@ def _extract_shareholders_via_llm(company_name: str, snippets: list) -> list:
 
     try:
         resp = requests.post(
-            HF_API_URL,
+            GROQ_API_URL,
             headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
             json={
-                "model": HF_MODEL,
+                "model": GROQ_MODEL,
                 "messages": [{"role": "user", "content": prompt}],
                 "max_tokens": 512,
                 "temperature": 0.0,

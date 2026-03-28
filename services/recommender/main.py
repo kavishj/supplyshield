@@ -21,14 +21,13 @@ app = FastAPI(title="RecommenderAgent", version="1.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 HTTP = requests.Session()
 
-# Qwen2.5-72B via HF chat-completions-compatible endpoint
-HF_MODEL   = "Qwen/Qwen2.5-7B-Instruct:together"
-HF_API_URL = "https://router.huggingface.co/v1/chat/completions"
-SERPER_URL = "https://google.serper.dev/search"
+GROQ_MODEL   = "llama-3.3-70b-versatile"
+GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
+SERPER_URL   = "https://google.serper.dev/search"
 
 
-def get_hf_token() -> str:
-    return os.getenv("HUGGINGFACE_API_TOKEN", "").strip()
+def get_groq_key() -> str:
+    return os.getenv("GROQ_API_KEY", "").strip()
 
 def get_serper_key() -> str:
     return os.getenv("SERPER_API_KEY", "").strip()
@@ -489,10 +488,10 @@ class RecommendRequest(BaseModel):
 @app.get("/health")
 def health():
     return {
-        "agent":              "RecommenderAgent",
-        "status":             "healthy",
-        "model":              HF_MODEL,
-        "hf_token_configured": bool(get_hf_token()),
+        "agent":               "RecommenderAgent",
+        "status":              "healthy",
+        "model":               GROQ_MODEL,
+        "groq_key_configured": bool(get_groq_key()),
         "serper_configured":   bool(get_serper_key()),
     }
 
@@ -508,19 +507,19 @@ def recommend(req: RecommendRequest):
         ofac_status=req.ofac_status, score_trend=req.score_trend,
     )
 
-    hf_token = get_hf_token()
-    if not hf_token:
+    groq_key = get_groq_key()
+    if not groq_key:
         result = rule_based_recommendations(req_data, web)
         result["elapsed_ms"] = round((time.perf_counter() - start) * 1000, 2)
         return result
 
-    # Step 2: Call Qwen2.5-72B
+    # Step 2: Call Llama 3.3 70B via Groq
     try:
         resp = HTTP.post(
-            HF_API_URL,
-            headers={"Authorization": f"Bearer {hf_token}", "Content-Type": "application/json"},
+            GROQ_API_URL,
+            headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
             json={
-                "model": HF_MODEL,
+                "model": GROQ_MODEL,
                 "messages": [
                     {"role": "system", "content": build_system_prompt()},
                     {"role": "user",   "content": build_user_prompt(req_data, web)},
@@ -529,13 +528,13 @@ def recommend(req: RecommendRequest):
                 "temperature": 0.4,
                 "top_p":       0.9,
             },
-            timeout=90,
+            timeout=60,
         )
 
         if resp.status_code in (429, 503):
             result = rule_based_recommendations(req_data, web)
-            result["model"]      = HF_MODEL
-            result["error"]      = f"HF {resp.status_code} — fallback used"
+            result["model"]      = GROQ_MODEL
+            result["error"]      = f"Groq {resp.status_code} — fallback used"
             result["elapsed_ms"] = round((time.perf_counter() - start) * 1000, 2)
             return result
 
@@ -575,15 +574,15 @@ def recommend(req: RecommendRequest):
             "long_term_actions":               long_term[:5],
             "top_recommendations_for_summary": parsed.get("top_recommendations_for_summary", ""),
             "web_sources":                     web["sources"],
-            "model":                           HF_MODEL,
+            "model":                           GROQ_MODEL,
             "success":                         True,
             "elapsed_ms":                      round((time.perf_counter() - start) * 1000, 2),
         }
 
     except Exception as e:
-        logger.warning(f"Qwen call failed: {e} — using rule-based fallback")
+        logger.warning(f"Groq call failed: {e} — using rule-based fallback")
         result = rule_based_recommendations(req_data, web)
-        result["model"]      = HF_MODEL
+        result["model"]      = GROQ_MODEL
         result["success"]    = False
         result["error"]      = str(e)
         result["elapsed_ms"] = round((time.perf_counter() - start) * 1000, 2)

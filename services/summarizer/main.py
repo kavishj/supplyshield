@@ -19,8 +19,8 @@ app = FastAPI(title="SummarizerAgent", version="3.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 HTTP = requests.Session()
 
-HF_MODEL   = "Qwen/Qwen2.5-7B-Instruct:together"
-HF_API_URL = "https://router.huggingface.co/v1/chat/completions"
+GROQ_MODEL   = "llama-3.3-70b-versatile"
+GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 COMPONENT_LABELS = {
     "geography":     "geographic concentration risk",
@@ -42,8 +42,8 @@ SUMMARY_LABELS = {
 }
 
 
-def get_hf_token():
-    return os.getenv("HUGGINGFACE_API_TOKEN", "").strip()
+def get_groq_key():
+    return os.getenv("GROQ_API_KEY", "").strip()
 
 
 # ── Structured extraction (rule-based, always runs) ───────────
@@ -138,26 +138,26 @@ class SummaryRequest(BaseModel):
 
 @app.get("/health")
 def health():
-    token = get_hf_token()
+    token = get_groq_key()
     return {
-        "agent":               "SummarizerAgent",
-        "status":              "healthy",
-        "model":               HF_MODEL,
-        "hf_token_configured": bool(token),
-        "version":             "3.0.0",
+        "agent":                "SummarizerAgent",
+        "status":               "healthy",
+        "model":                GROQ_MODEL,
+        "groq_key_configured":  bool(token),
+        "version":              "3.0.0",
     }
 
 
 @app.post("/summarize")
 def summarize(req: SummaryRequest):
-    start    = time.perf_counter()
-    hf_token = get_hf_token()
-    data     = req.model_dump()
+    start      = time.perf_counter()
+    groq_key   = get_groq_key()
+    data       = req.model_dump()
 
     # Always extract structured fields
     structured = extract_structured(data)
 
-    if not hf_token:
+    if not groq_key:
         return {
             "summary":          rule_based_summary(data, req.top_recommendations),
             "top_risk_factor":  structured["top_risk_factor"],
@@ -234,10 +234,10 @@ def summarize(req: SummaryRequest):
 
     try:
         resp = HTTP.post(
-            HF_API_URL,
-            headers={"Authorization": f"Bearer {hf_token}", "Content-Type": "application/json"},
+            GROQ_API_URL,
+            headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
             json={
-                "model": HF_MODEL,
+                "model": GROQ_MODEL,
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user",   "content": user_prompt},
@@ -255,9 +255,9 @@ def summarize(req: SummaryRequest):
                 "top_risk_factor": structured["top_risk_factor"],
                 "key_concerns":    structured["key_concerns"],
                 "gaps":            structured["gaps"],
-                "model":           HF_MODEL,
+                "model":           GROQ_MODEL,
                 "success":         False,
-                "error":           f"HF {resp.status_code} — fallback used",
+                "error":           f"Groq {resp.status_code} — fallback used",
                 "elapsed_ms":      round((time.perf_counter() - start) * 1000, 2),
             }
 
@@ -273,19 +273,19 @@ def summarize(req: SummaryRequest):
             "top_risk_factor":  structured["top_risk_factor"],
             "key_concerns":     structured["key_concerns"],
             "gaps":             structured["gaps"],
-            "model":            HF_MODEL,
+            "model":            GROQ_MODEL,
             "success":          True,
             "elapsed_ms":       round((time.perf_counter() - start) * 1000, 2),
         }
 
     except Exception as e:
-        logger.warning(f"HF call failed: {e} — using fallback")
+        logger.warning(f"Groq call failed: {e} — using fallback")
         return {
             "summary":          rule_based_summary(data, req.top_recommendations),
             "top_risk_factor":  structured["top_risk_factor"],
             "key_concerns":     structured["key_concerns"],
             "gaps":             structured["gaps"],
-            "model":            HF_MODEL,
+            "model":            GROQ_MODEL,
             "success":          False,
             "error":            str(e),
             "elapsed_ms":       round((time.perf_counter() - start) * 1000, 2),
