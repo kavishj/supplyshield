@@ -172,8 +172,23 @@ def score(req: ScoreRequest):
     ])
 
     if req.custom_weights:
-        raw_weights = {k: float(v) for k, v in req.custom_weights.items() if float(v) > 0}
-        weights = _normalise_weights(raw_weights)
+        raw_custom = {k: float(v) for k, v in req.custom_weights.items() if float(v) > 0}
+        if has_expanded:
+            # Performance metrics take fixed weights from EXPANDED_WEIGHTS.
+            # User's custom weights (geo/news/ss/lt) fill the remaining budget.
+            NEW_METRIC_KEYS = {
+                "order_fill_rate", "lead_time_variability", "audit_pass_rate",
+                "improvement_index", "cyber_posture", "disruption_frequency",
+            }
+            active_fixed = {k: EXPANDED_WEIGHTS[k] for k in NEW_METRIC_KEYS if k in components}
+            fixed_total  = sum(active_fixed.values())
+            remaining    = max(0.01, 1.0 - fixed_total)
+            custom_total = sum(raw_custom.values())
+            scaled       = {k: (v / custom_total) * remaining for k, v in raw_custom.items()} \
+                           if custom_total > 0 else {}
+            weights = {**active_fixed, **scaled}
+        else:
+            weights = _normalise_weights(raw_custom)
     elif has_expanded:
         weights = dict(EXPANDED_WEIGHTS)
     elif has_extended:

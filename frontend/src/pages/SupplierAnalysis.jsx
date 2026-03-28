@@ -83,10 +83,29 @@ function RiskGauge({ score }) {
 
 // ── Risk breakdown bar chart ──────────────────────────────────────────────────
 const FACTOR_LABELS = {
-  geography:     'Geographic Conc.',
-  news:          'News Sentiment',
-  single_source: 'Single-Source',
-  lead_time:     'Lead Time',
+  geography:             'Geographic Conc.',
+  news:                  'News Sentiment',
+  single_source:         'Single-Source',
+  lead_time:             'Lead Time',
+  financial_health:      'Financial Health',
+  on_time_delivery:      'On-Time Delivery',
+  contract_expiry:       'Contract Expiry',
+  order_fill_rate:       'Order Fill Rate',
+  lead_time_variability: 'LT Variability',
+  audit_pass_rate:       'Audit Pass Rate',
+  improvement_index:     'Improvement Index',
+  cyber_posture:         'Cyber Posture',
+  disruption_frequency:  'Disruption Freq.',
+}
+
+// Fixed weights consumed by performance metrics (mirrors EXPANDED_WEIGHTS in config.py)
+const FIXED_WEIGHT_MAP = {
+  order_fill_rate:       0.08,
+  lead_time_variability: 0.06,
+  audit_pass_rate:       0.09,
+  improvement_index:     0.05,
+  cyber_posture:         0.07,
+  disruption_frequency:  0.06,
 }
 
 function BreakdownChart({ components, weights, score }) {
@@ -253,6 +272,15 @@ export default function SupplierAnalysis() {
     include_summary: true,
     include_recs:  false,
     w_geo: 38, w_news: 31, w_single: 16, w_lead: 15,
+    // Performance & compliance metrics (13-factor model)
+    order_fill_rate:       '',
+    lead_time_variability: '',
+    audit_pass_rate:       '',
+    improvement_index:     '',
+    cyber_posture:         '',
+    disruption_frequency:  '',
+    inventory_buffer_days: '',
+    has_rto_defined:       false,
   })
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [showWeights, setShowWeights] = useState(() => {
@@ -299,6 +327,12 @@ export default function SupplierAnalysis() {
     ? { geography: form.w_geo/100, news: form.w_news/100, single_source: form.w_single/100, lead_time: form.w_lead/100 }
     : null
 
+  // How much of the total score weight is consumed by filled performance metrics (fixed)
+  const fixedBudget  = Object.entries(FIXED_WEIGHT_MAP)
+    .filter(([k]) => form[k] !== '' && form[k] !== null && form[k] !== undefined)
+    .reduce((sum, [, w]) => sum + w, 0)
+  const remainingPct = Math.round((1 - fixedBudget) * 100)
+
   const handleRun = async () => {
     if (!form.company_name.trim()) { setError('Company name is required.'); return }
     setError(''); setRunning(true); setResult(null)
@@ -312,6 +346,15 @@ export default function SupplierAnalysis() {
         include_summary:          form.include_summary,
         include_recommendations:  form.include_recs,
         ...(customWeights ? { custom_weights: customWeights } : {}),
+        // Performance & compliance metrics — only send if filled
+        ...(form.order_fill_rate       !== '' ? { order_fill_rate:       parseFloat(form.order_fill_rate) }       : {}),
+        ...(form.lead_time_variability !== '' ? { lead_time_variability: form.lead_time_variability }             : {}),
+        ...(form.audit_pass_rate       !== '' ? { audit_pass_rate:       parseFloat(form.audit_pass_rate) }       : {}),
+        ...(form.improvement_index     !== '' ? { improvement_index:     parseFloat(form.improvement_index) }     : {}),
+        ...(form.cyber_posture         !== '' ? { cyber_posture:         form.cyber_posture }                     : {}),
+        ...(form.disruption_frequency  !== '' ? { disruption_frequency:  parseInt(form.disruption_frequency) }   : {}),
+        ...(form.inventory_buffer_days !== '' ? { inventory_buffer_days: parseInt(form.inventory_buffer_days) }  : {}),
+        ...(form.has_rto_defined              ? { has_rto_defined:       true }                                   : {}),
       }
       const res = await apiAnalyze(payload)
       setResult(res.data)
@@ -478,6 +521,20 @@ export default function SupplierAnalysis() {
               />
             </div>
 
+            {/* Lead time + single source — always visible */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 mb-4 mt-2">
+              <NeuInput label="Lead Time (weeks)" type="number" min="1" max="104"
+                        value={form.lead_time} onChange={inp('lead_time')} />
+              <div className="flex items-center gap-3 pt-6">
+                <div onClick={() => set('single_source')(!form.single_source)}
+                  className={`w-5 h-5 rounded-[6px] flex-shrink-0 flex items-center justify-center cursor-pointer transition-all duration-300
+                    ${form.single_source ? 'bg-neu-accent shadow-neu-btn-active' : 'shadow-neu-in'}`}>
+                  {form.single_source && <span className="text-white text-xs font-bold">✓</span>}
+                </div>
+                <span className="text-[0.82rem] text-neu-fg font-medium">Single Source Supplier</span>
+              </div>
+            </div>
+
             {/* Advanced toggle */}
             <button onClick={() => setShowAdvanced(v => !v)}
               className="text-[0.75rem] text-neu-accent font-semibold mb-4 hover:text-neu-accent-lt transition-colors">
@@ -486,25 +543,89 @@ export default function SupplierAnalysis() {
 
             {showAdvanced && (
               <div className="neu-well p-5 rounded-neu-sm mb-4">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-x-6">
-                  <div className="mb-4">
-                    <label className="block mb-2 text-[0.68rem] font-semibold uppercase tracking-[0.9px] text-neu-muted">
-                      Geographic Concentration: {Number(form.geo_conc).toFixed(2)}
-                    </label>
-                    <input type="range" min="0" max="1" step="0.05" value={form.geo_conc}
-                      onChange={e => set('geo_conc')(parseFloat(e.target.value))}
-                      className="w-full h-1.5 rounded-full appearance-none cursor-pointer"
-                      style={{ background: `linear-gradient(to right, #6C63FF ${form.geo_conc*100}%, rgba(163,177,198,0.4) ${form.geo_conc*100}%)` }} />
-                  </div>
-                  <NeuInput label="Lead Time (weeks)" type="number" min="1" max="104"
-                            value={form.lead_time} onChange={inp('lead_time')} />
-                  <div className="flex items-center gap-3 pt-6">
-                    <div onClick={() => set('single_source')(!form.single_source)}
-                      className={`w-5 h-5 rounded-[6px] flex-shrink-0 flex items-center justify-center cursor-pointer transition-all duration-300
-                        ${form.single_source ? 'bg-neu-accent shadow-neu-btn-active' : 'shadow-neu-in'}`}>
-                      {form.single_source && <span className="text-white text-xs font-bold">✓</span>}
+
+                {/* Geographic concentration */}
+                <div className="mb-4">
+                  <label className="block mb-2 text-[0.68rem] font-semibold uppercase tracking-[0.9px] text-neu-muted">
+                    Geographic Concentration: {Number(form.geo_conc).toFixed(2)}
+                  </label>
+                  <input type="range" min="0" max="1" step="0.05" value={form.geo_conc}
+                    onChange={e => set('geo_conc')(parseFloat(e.target.value))}
+                    className="w-full h-1.5 rounded-full appearance-none cursor-pointer"
+                    style={{ background: `linear-gradient(to right, #6C63FF ${form.geo_conc*100}%, rgba(163,177,198,0.4) ${form.geo_conc*100}%)` }} />
+                </div>
+
+                {/* Performance & Compliance Metrics */}
+                <div className="pt-3 border-t border-[rgba(163,177,198,0.3)] mb-3">
+                  <p className="text-[0.65rem] font-bold uppercase tracking-[1.2px] text-neu-muted mb-3">
+                    Performance &amp; Compliance Metrics
+                    {fixedBudget > 0 && (
+                      <span className="ml-2 text-neu-accent normal-case font-normal tracking-normal">
+                        · {Math.round(fixedBudget * 100)}% of total score weight allocated
+                      </span>
+                    )}
+                  </p>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+                    <div>
+                      <label className="block mb-1 text-[0.62rem] font-semibold uppercase tracking-wide text-neu-muted">Order Fill Rate %</label>
+                      <input type="number" min="0" max="100" step="1" placeholder="e.g. 92"
+                        value={form.order_fill_rate} onChange={inp('order_fill_rate')}
+                        className="neu-input !py-2 text-sm w-full" />
                     </div>
-                    <span className="text-[0.82rem] text-neu-fg font-medium">Single Source Supplier</span>
+                    <div>
+                      <label className="block mb-1 text-[0.62rem] font-semibold uppercase tracking-wide text-neu-muted">Audit Pass Rate %</label>
+                      <input type="number" min="0" max="100" step="1" placeholder="e.g. 85"
+                        value={form.audit_pass_rate} onChange={inp('audit_pass_rate')}
+                        className="neu-input !py-2 text-sm w-full" />
+                    </div>
+                    <div>
+                      <label className="block mb-1 text-[0.62rem] font-semibold uppercase tracking-wide text-neu-muted">Improvement Index %</label>
+                      <input type="number" min="0" max="100" step="1" placeholder="e.g. 78"
+                        value={form.improvement_index} onChange={inp('improvement_index')}
+                        className="neu-input !py-2 text-sm w-full" />
+                    </div>
+                    <div>
+                      <label className="block mb-1 text-[0.62rem] font-semibold uppercase tracking-wide text-neu-muted">Disruptions / Year</label>
+                      <input type="number" min="0" step="1" placeholder="e.g. 2"
+                        value={form.disruption_frequency} onChange={inp('disruption_frequency')}
+                        className="neu-input !py-2 text-sm w-full" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div>
+                      <label className="block mb-1 text-[0.62rem] font-semibold uppercase tracking-wide text-neu-muted">LT Variability</label>
+                      <select value={form.lead_time_variability} onChange={inp('lead_time_variability')}
+                        className="neu-input !py-2 text-sm w-full">
+                        <option value="">— select —</option>
+                        <option value="Low">Low</option>
+                        <option value="Medium">Medium</option>
+                        <option value="High">High</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block mb-1 text-[0.62rem] font-semibold uppercase tracking-wide text-neu-muted">Cyber Posture</label>
+                      <select value={form.cyber_posture} onChange={inp('cyber_posture')}
+                        className="neu-input !py-2 text-sm w-full">
+                        <option value="">— select —</option>
+                        <option value="Poor">Poor</option>
+                        <option value="Fair">Fair</option>
+                        <option value="Good">Good</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block mb-1 text-[0.62rem] font-semibold uppercase tracking-wide text-neu-muted">Inventory Buffer (days)</label>
+                      <input type="number" min="0" step="1" placeholder="e.g. 45"
+                        value={form.inventory_buffer_days} onChange={inp('inventory_buffer_days')}
+                        className="neu-input !py-2 text-sm w-full" />
+                    </div>
+                    <div className="flex items-center gap-2 pt-5">
+                      <div onClick={() => set('has_rto_defined')(!form.has_rto_defined)}
+                        className={`w-5 h-5 rounded-[6px] flex-shrink-0 flex items-center justify-center cursor-pointer transition-all duration-300
+                          ${form.has_rto_defined ? 'bg-neu-accent shadow-neu-btn-active' : 'shadow-neu-in'}`}>
+                        {form.has_rto_defined && <span className="text-white text-xs font-bold">✓</span>}
+                      </div>
+                      <span className="text-[0.78rem] text-neu-fg">RTO Defined</span>
+                    </div>
                   </div>
                 </div>
 
@@ -522,7 +643,10 @@ export default function SupplierAnalysis() {
                   {showWeights && (
                     <div>
                       <p className="text-[0.62rem] text-neu-muted mb-3">
-                        Must sum to 100%
+                        {fixedBudget > 0
+                          ? <>These 4 factors share <strong>{remainingPct}%</strong> of the total score weight &mdash; the remaining {Math.round(fixedBudget*100)}% is fixed to performance metrics above. Values must sum to 100%.</>
+                          : <>Controls 100% of the risk score. Must sum to 100%.</>
+                        }
                         {weightTotal !== 100 && <span className="text-neu-risk-md ml-2">· Currently: {weightTotal}%</span>}
                       </p>
                       <div className="grid grid-cols-4 gap-3">
