@@ -40,30 +40,43 @@ const decisionStyle = {
 
 // ── Custom SVG gauge ──────────────────────────────────────────────────────────
 function RiskGauge({ score }) {
-  const R    = 80
-  const cx   = 110, cy = 100
-  const ang  = score * Math.PI
-  const ex   = cx + R * Math.cos(Math.PI + ang)
-  const ey   = cy + R * Math.sin(Math.PI + ang)
-  const large = score > 0.5 ? 1 : 0
+  const R  = 78
+  const cx = 110, cy = 105
+  // Arc endpoint — always large=0 since we're drawing ≤180° of the semicircle
+  const ang = score * Math.PI
+  const ex  = cx + R * Math.cos(Math.PI + ang)
+  const ey  = cy + R * Math.sin(Math.PI + ang)
   const color = riskColor(score)
 
+  // Needle: from center pivot to a point slightly inside the arc
+  const needleLen = R - 10
+  const nx = cx + needleLen * Math.cos(Math.PI + ang)
+  const ny = cy + needleLen * Math.sin(Math.PI + ang)
+
   return (
-    <svg viewBox="0 0 220 120" className="w-full max-w-[260px] mx-auto">
+    <svg viewBox="0 0 220 130" className="w-full max-w-[280px] mx-auto">
+      {/* Track */}
       <path d={`M ${cx - R} ${cy} A ${R} ${R} 0 0 1 ${cx + R} ${cy}`}
-            fill="none" stroke="rgba(163,177,198,0.35)" strokeWidth="14" strokeLinecap="round" />
+            fill="none" stroke="rgba(163,177,198,0.25)" strokeWidth="16" strokeLinecap="round" />
+      {/* Filled arc — large flag always 0 */}
       {score > 0 && (
-        <path d={`M ${cx - R} ${cy} A ${R} ${R} 0 ${large} 1 ${ex} ${ey}`}
-              fill="none" stroke={color} strokeWidth="14" strokeLinecap="round" />
+        <path d={`M ${cx - R} ${cy} A ${R} ${R} 0 0 1 ${ex} ${ey}`}
+              fill="none" stroke={color} strokeWidth="16" strokeLinecap="round" />
       )}
-      <line x1={cx} y1={cy - R - 4} x2={cx} y2={cy - R + 8} stroke="rgba(163,177,198,0.5)" strokeWidth="1.5" />
-      <text x={cx} y={cy + 14} textAnchor="middle" fill={color}
-            fontSize="26" fontWeight="800" fontFamily="Plus Jakarta Sans, sans-serif">
+      {/* Needle */}
+      <line x1={cx} y1={cy} x2={nx} y2={ny}
+            stroke={color} strokeWidth="3" strokeLinecap="round" />
+      {/* Pivot circle */}
+      <circle cx={cx} cy={cy} r="5" fill={color} />
+      {/* Score text */}
+      <text x={cx} y={cy - 18} textAnchor="middle" fill={color}
+            fontSize="28" fontWeight="800" fontFamily="Plus Jakarta Sans, sans-serif">
         {score.toFixed(3)}
       </text>
-      <text x={cx - R - 2} y={cy + 18} textAnchor="end"    fill="#10B981" fontSize="9" fontFamily="DM Sans, sans-serif">LOW</text>
-      <text x={cx}          y={cy + 30} textAnchor="middle" fill="#F59E0B" fontSize="9" fontFamily="DM Sans, sans-serif">MEDIUM</text>
-      <text x={cx + R + 2} y={cy + 18} textAnchor="start"  fill="#EF4444" fontSize="9" fontFamily="DM Sans, sans-serif">HIGH</text>
+      {/* Labels */}
+      <text x={cx - R - 4} y={cy + 16} textAnchor="middle" fill="#10B981" fontSize="9" fontFamily="DM Sans, sans-serif">LOW</text>
+      <text x={cx}          y={cy + 22} textAnchor="middle" fill="#F59E0B" fontSize="9" fontFamily="DM Sans, sans-serif">MED</text>
+      <text x={cx + R + 4} y={cy + 16} textAnchor="middle" fill="#EF4444" fontSize="9" fontFamily="DM Sans, sans-serif">HIGH</text>
     </svg>
   )
 }
