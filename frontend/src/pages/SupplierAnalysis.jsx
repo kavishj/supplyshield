@@ -38,6 +38,18 @@ const decisionStyle = {
   AUTO_APPROVED:     { bg: 'bg-[#F0FDF4]', border: 'border-l-4 border-neu-teal',    text: 'text-neu-teal',     label: 'AUTO-APPROVED' },
 }
 
+// ── Tooltip helper ────────────────────────────────────────────────────────────
+function Tip({ text }) {
+  return (
+    <span className="relative group inline-flex ml-1 cursor-help">
+      <span className="text-[0.6rem] text-neu-muted border border-[rgba(163,177,198,0.4)] rounded-full w-3.5 h-3.5 flex items-center justify-center leading-none font-bold">?</span>
+      <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 w-52 bg-[#1a2030] text-[0.7rem] text-neu-fg rounded-lg px-3 py-2 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-50 leading-relaxed">
+        {text}
+      </span>
+    </span>
+  )
+}
+
 // ── Custom SVG gauge ──────────────────────────────────────────────────────────
 function RiskGauge({ score }) {
   const R  = 78
@@ -567,25 +579,25 @@ export default function SupplierAnalysis() {
                   </p>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
                     <div>
-                      <label className="block mb-1 text-[0.62rem] font-semibold uppercase tracking-wide text-neu-muted">Order Fill Rate %</label>
+                      <label className="block mb-1 text-[0.62rem] font-semibold uppercase tracking-wide text-neu-muted">Order Fill Rate %<Tip text="% of orders delivered in full and on time (OTIF). Below 85% signals fulfilment risk. Industry benchmark: ≥95%." /></label>
                       <input type="number" min="0" max="100" step="1" placeholder="e.g. 92"
                         value={form.order_fill_rate} onChange={inp('order_fill_rate')}
                         className="neu-input !py-2 text-sm w-full" />
                     </div>
                     <div>
-                      <label className="block mb-1 text-[0.62rem] font-semibold uppercase tracking-wide text-neu-muted">Audit Pass Rate %</label>
+                      <label className="block mb-1 text-[0.62rem] font-semibold uppercase tracking-wide text-neu-muted">Audit Pass Rate %<Tip text="% of compliance/quality audits passed without major findings. Below 75% indicates systemic compliance weakness." /></label>
                       <input type="number" min="0" max="100" step="1" placeholder="e.g. 85"
                         value={form.audit_pass_rate} onChange={inp('audit_pass_rate')}
                         className="neu-input !py-2 text-sm w-full" />
                     </div>
                     <div>
-                      <label className="block mb-1 text-[0.62rem] font-semibold uppercase tracking-wide text-neu-muted">Improvement Index %</label>
+                      <label className="block mb-1 text-[0.62rem] font-semibold uppercase tracking-wide text-neu-muted">Improvement Index %<Tip text="Corrective-action closure rate — % of raised issues resolved on time. Low scores signal poor responsiveness to quality problems." /></label>
                       <input type="number" min="0" max="100" step="1" placeholder="e.g. 78"
                         value={form.improvement_index} onChange={inp('improvement_index')}
                         className="neu-input !py-2 text-sm w-full" />
                     </div>
                     <div>
-                      <label className="block mb-1 text-[0.62rem] font-semibold uppercase tracking-wide text-neu-muted">Disruptions / Year</label>
+                      <label className="block mb-1 text-[0.62rem] font-semibold uppercase tracking-wide text-neu-muted">Disruptions / Year<Tip text="Number of supply chain incidents (delays, shortages, quality holds) in the past 12 months. ≥4 per year = high disruption risk." /></label>
                       <input type="number" min="0" step="1" placeholder="e.g. 2"
                         value={form.disruption_frequency} onChange={inp('disruption_frequency')}
                         className="neu-input !py-2 text-sm w-full" />
@@ -593,7 +605,7 @@ export default function SupplierAnalysis() {
                   </div>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     <div>
-                      <label className="block mb-1 text-[0.62rem] font-semibold uppercase tracking-wide text-neu-muted">LT Variability</label>
+                      <label className="block mb-1 text-[0.62rem] font-semibold uppercase tracking-wide text-neu-muted">LT Variability<Tip text="How predictable the supplier's lead times are. High variability makes demand planning unreliable even if average lead time is acceptable." /></label>
                       <select value={form.lead_time_variability} onChange={inp('lead_time_variability')}
                         className="neu-input !py-2 text-sm w-full">
                         <option value="">— select —</option>
@@ -603,7 +615,7 @@ export default function SupplierAnalysis() {
                       </select>
                     </div>
                     <div>
-                      <label className="block mb-1 text-[0.62rem] font-semibold uppercase tracking-wide text-neu-muted">Cyber Posture</label>
+                      <label className="block mb-1 text-[0.62rem] font-semibold uppercase tracking-wide text-neu-muted">Cyber Posture<Tip text="Supplier's cybersecurity maturity. Poor posture increases risk of data breach, ransomware, or operational disruption propagating to your supply chain." /></label>
                       <select value={form.cyber_posture} onChange={inp('cyber_posture')}
                         className="neu-input !py-2 text-sm w-full">
                         <option value="">— select —</option>
@@ -613,7 +625,7 @@ export default function SupplierAnalysis() {
                       </select>
                     </div>
                     <div>
-                      <label className="block mb-1 text-[0.62rem] font-semibold uppercase tracking-wide text-neu-muted">Inventory Buffer (days)</label>
+                      <label className="block mb-1 text-[0.62rem] font-semibold uppercase tracking-wide text-neu-muted">Inventory Buffer (days)<Tip text="Your current days-of-supply on hand for this supplier's components. Used by the AI to calibrate urgency of mitigation recommendations." /></label>
                       <input type="number" min="0" step="1" placeholder="e.g. 45"
                         value={form.inventory_buffer_days} onChange={inp('inventory_buffer_days')}
                         className="neu-input !py-2 text-sm w-full" />
@@ -624,7 +636,7 @@ export default function SupplierAnalysis() {
                           ${form.has_rto_defined ? 'bg-neu-accent shadow-neu-btn-active' : 'shadow-neu-in'}`}>
                         {form.has_rto_defined && <span className="text-white text-xs font-bold">✓</span>}
                       </div>
-                      <span className="text-[0.78rem] text-neu-fg">RTO Defined</span>
+                      <span className="text-[0.78rem] text-neu-fg">RTO Defined<Tip text="Recovery Time Objective — whether your organisation has a documented maximum acceptable downtime if this supplier fails. Informs recommendation urgency." /></span>
                     </div>
                   </div>
                 </div>

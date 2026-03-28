@@ -134,6 +134,28 @@ def _row_to_dict(row) -> dict:
     return dict(row) if row else {}
 
 
+def _migrate_db():
+    """Add new columns to onboarded_suppliers if they don't exist yet."""
+    new_columns = [
+        ("order_fill_rate",       "REAL"),
+        ("audit_pass_rate",       "REAL"),
+        ("improvement_index",     "REAL"),
+        ("disruption_frequency",  "INTEGER"),
+        ("lead_time_variability", "TEXT"),
+        ("cyber_posture",         "TEXT"),
+        ("inventory_buffer_days", "INTEGER"),
+        ("has_rto_defined",       "INTEGER DEFAULT 0"),
+    ]
+    with _db() as conn:
+        existing = {row[1] for row in conn.execute("PRAGMA table_info(onboarded_suppliers)")}
+        for col, col_type in new_columns:
+            if col not in existing:
+                conn.execute(f"ALTER TABLE onboarded_suppliers ADD COLUMN {col} {col_type}")
+        conn.commit()
+
+_migrate_db()
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # FastAPI app
 # ─────────────────────────────────────────────────────────────────────────────
@@ -200,6 +222,14 @@ class SupplierPayload(BaseModel):
     on_time_delivery_rate:Optional[float]    = None
     years_in_relationship:Optional[int]      = None
     financial_health:     Optional[str]      = None
+    order_fill_rate:       Optional[float]    = None
+    audit_pass_rate:       Optional[float]    = None
+    improvement_index:     Optional[float]    = None
+    disruption_frequency:  Optional[int]      = None
+    lead_time_variability: Optional[str]      = None
+    cyber_posture:         Optional[str]      = None
+    inventory_buffer_days: Optional[int]      = None
+    has_rto_defined:       Optional[bool]     = False
 
 class ActionStatusPayload(BaseModel):
     action_id: str
@@ -340,14 +370,23 @@ def save_onboarded_supplier(data: SupplierPayload, _user: dict = Depends(require
                     annual_spend_usd=?, spend_percentage=?, contract_expiry=?,
                     category=?, notes=?, tier_level=?, sole_source=?,
                     on_time_delivery_rate=?, years_in_relationship=?,
-                    financial_health=?, updated_at=datetime('now')
+                    financial_health=?, order_fill_rate=?, audit_pass_rate=?,
+                    improvement_index=?, disruption_frequency=?,
+                    lead_time_variability=?, cyber_posture=?,
+                    inventory_buffer_days=?, has_rto_defined=?,
+                    updated_at=datetime('now')
                 WHERE id=?
             """, (
                 data.country, data.what_they_supply, data.criticality,
                 data.annual_spend_usd, data.spend_percentage, data.contract_expiry,
                 data.category, data.notes, data.tier_level,
                 int(data.sole_source or False), data.on_time_delivery_rate,
-                data.years_in_relationship, data.financial_health, existing[0],
+                data.years_in_relationship, data.financial_health,
+                data.order_fill_rate, data.audit_pass_rate,
+                data.improvement_index, data.disruption_frequency,
+                data.lead_time_variability, data.cyber_posture,
+                data.inventory_buffer_days, int(data.has_rto_defined or False),
+                existing[0],
             ))
         else:
             conn.execute("""
@@ -355,14 +394,21 @@ def save_onboarded_supplier(data: SupplierPayload, _user: dict = Depends(require
                     name, country, what_they_supply, criticality,
                     annual_spend_usd, spend_percentage, contract_expiry,
                     category, notes, tier_level, sole_source,
-                    on_time_delivery_rate, years_in_relationship, financial_health
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    on_time_delivery_rate, years_in_relationship, financial_health,
+                    order_fill_rate, audit_pass_rate, improvement_index,
+                    disruption_frequency, lead_time_variability, cyber_posture,
+                    inventory_buffer_days, has_rto_defined
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """, (
                 data.name, data.country, data.what_they_supply, data.criticality,
                 data.annual_spend_usd, data.spend_percentage, data.contract_expiry,
                 data.category, data.notes, data.tier_level,
                 int(data.sole_source or False), data.on_time_delivery_rate,
                 data.years_in_relationship, data.financial_health,
+                data.order_fill_rate, data.audit_pass_rate,
+                data.improvement_index, data.disruption_frequency,
+                data.lead_time_variability, data.cyber_posture,
+                data.inventory_buffer_days, int(data.has_rto_defined or False),
             ))
         conn.commit()
     return {"success": True}

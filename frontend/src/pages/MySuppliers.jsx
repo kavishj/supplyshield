@@ -130,6 +130,14 @@ function SupplierCard({ s, onAnalyze, onDelete, onRefresh }) {
       on_time_delivery_rate: s.on_time_delivery_rate ?? '',
       years_in_relationship: s.years_in_relationship ?? '',
       financial_health:      s.financial_health      ?? '',
+      order_fill_rate:       s.order_fill_rate       ?? '',
+      audit_pass_rate:       s.audit_pass_rate       ?? '',
+      improvement_index:     s.improvement_index     ?? '',
+      disruption_frequency:  s.disruption_frequency  ?? '',
+      lead_time_variability: s.lead_time_variability ?? '',
+      cyber_posture:         s.cyber_posture         ?? '',
+      inventory_buffer_days: s.inventory_buffer_days ?? '',
+      has_rto_defined:       Boolean(s.has_rto_defined),
       notes:                 s.notes                 ?? '',
     })
     setEditing(true)
@@ -153,6 +161,14 @@ function SupplierCard({ s, onAnalyze, onDelete, onRefresh }) {
         financial_health: editForm.financial_health || null,
         contract_expiry:  editForm.contract_expiry  || null,
         notes:            editForm.notes?.trim()    || null,
+        order_fill_rate:       editForm.order_fill_rate      ? parseFloat(editForm.order_fill_rate)      : null,
+        audit_pass_rate:       editForm.audit_pass_rate      ? parseFloat(editForm.audit_pass_rate)      : null,
+        improvement_index:     editForm.improvement_index    ? parseFloat(editForm.improvement_index)    : null,
+        disruption_frequency:  editForm.disruption_frequency ? parseInt(editForm.disruption_frequency)   : null,
+        lead_time_variability: editForm.lead_time_variability || null,
+        cyber_posture:         editForm.cyber_posture        || null,
+        inventory_buffer_days: editForm.inventory_buffer_days ? parseInt(editForm.inventory_buffer_days) : null,
+        has_rto_defined:       editForm.has_rto_defined,
       })
       toast('Supplier updated successfully.', 'success')
       setEditing(false)
@@ -367,6 +383,29 @@ function SupplierCard({ s, onAnalyze, onDelete, onRefresh }) {
             </div>
             <span className="text-[0.85rem] text-neu-fg font-medium">Sole Source Supplier</span>
           </label>
+
+          {/* Performance & Compliance */}
+          <div className="mb-4 pt-3 border-t border-[rgba(163,177,198,0.2)]">
+            <p className="text-[0.62rem] font-bold uppercase tracking-[1.2px] text-neu-muted mb-3">Performance &amp; Compliance</p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+              <NeuInput label="Order Fill Rate (%)" type="number" min="0" max="100" value={editForm.order_fill_rate} onChange={ef('order_fill_rate')} placeholder="e.g. 92" />
+              <NeuInput label="Audit Pass Rate (%)" type="number" min="0" max="100" value={editForm.audit_pass_rate} onChange={ef('audit_pass_rate')} placeholder="e.g. 85" />
+              <NeuInput label="Improvement Index (%)" type="number" min="0" max="100" value={editForm.improvement_index} onChange={ef('improvement_index')} placeholder="e.g. 78" />
+              <NeuInput label="Disruptions / Year" type="number" min="0" value={editForm.disruption_frequency} onChange={ef('disruption_frequency')} placeholder="e.g. 2" />
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+              <NeuSelect label="LT Variability" value={editForm.lead_time_variability} onChange={es('lead_time_variability')} options={['Low','Medium','High']} placeholder="— select —" />
+              <NeuSelect label="Cyber Posture" value={editForm.cyber_posture} onChange={es('cyber_posture')} options={['Good','Fair','Poor']} placeholder="— select —" />
+              <NeuInput label="Inventory Buffer (days)" type="number" min="0" value={editForm.inventory_buffer_days} onChange={ef('inventory_buffer_days')} placeholder="e.g. 45" />
+              <div className="flex items-center gap-2 pt-5">
+                <div onClick={() => es('has_rto_defined')(!editForm.has_rto_defined)}
+                  className={`w-5 h-5 rounded-[6px] flex-shrink-0 flex items-center justify-center cursor-pointer transition-all duration-300 ${editForm.has_rto_defined ? 'bg-neu-accent shadow-neu-btn-active' : 'shadow-neu-in'}`}>
+                  {editForm.has_rto_defined && <span className="text-white text-xs font-bold">✓</span>}
+                </div>
+                <span className="text-[0.78rem] text-neu-fg">RTO Defined</span>
+              </div>
+            </div>
+          </div>
 
           {/* Notes */}
           <div className="mb-4">
