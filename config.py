@@ -74,6 +74,36 @@ TREND_IMPROVING_DELTA      = -0.05   # score fell by ≥ this → IMPROVING
 # ── Current year (for dynamic search queries) ─────────────────
 CURRENT_YEAR = datetime.now().year
 
+# ── Category → Industry Certifications / Standards ────────────
+# Injected into recommender prompts to replace generic "get audited" advice
+# with specific certification names relevant to the supplier's category.
+CATEGORY_CERTIFICATIONS = {
+    # Manufacturing / Industrial
+    "electronics":          ["ISO 9001", "IPC-A-610", "IATF 16949 (if automotive)", "RoHS/REACH compliance"],
+    "semiconductor":        ["ISO 9001", "IATF 16949", "AEC-Q100/Q101", "ISO 26262 (automotive)"],
+    "automotive":           ["IATF 16949", "ISO 26262", "APQP/PPAP", "VDA 6.3 process audit"],
+    "aerospace":            ["AS9100D", "NADCAP", "FAA/EASA approval", "ISO 9001"],
+    "medical devices":      ["ISO 13485", "FDA 21 CFR Part 820", "CE marking", "MDR 2017/745"],
+    "pharmaceuticals":      ["GMP (21 CFR Parts 210/211)", "ISO 15378", "ICH Q10", "FDA registration"],
+    "food":                 ["FSSC 22000", "BRC Global Standard", "SQF Level 2/3", "HACCP certification"],
+    "chemicals":            ["ISO 14001", "REACH registration", "Responsible Care", "ISO 45001"],
+    "textiles":             ["OEKO-TEX Standard 100", "GOTS", "SA8000 (labour)", "WRAP certification"],
+    "packaging":            ["ISO 9001", "FSC chain of custody", "BRC/IOP", "ISO 22000"],
+    "construction":         ["ISO 9001", "CE marking (products)", "ISO 14001", "OHSAS 18001/ISO 45001"],
+    "metals":               ["ISO 9001", "EN 10204 material certs", "NADCAP (special processes)", "RoHS"],
+    "plastics":             ["ISO 9001", "IATF 16949 (automotive)", "RoHS/REACH", "UL certification"],
+    # Logistics / Services
+    "logistics":            ["ISO 28001", "CTPAT (US)", "AEO (EU)", "ISO 9001", "TAPA FSR/TSR"],
+    "warehousing":          ["ISO 9001", "CTPAT", "GDP (pharma)", "ISO 28001"],
+    "it services":          ["ISO 27001", "SOC 2 Type II", "ISO 20000", "CMMC (US defence)"],
+    "software":             ["ISO 27001", "SOC 2 Type II", "ISO 9001", "CMMI Level 3+"],
+    # Commodities / Raw materials
+    "raw materials":        ["ISO 9001", "conflict minerals (3TG/Dodd-Frank)", "ISO 14001", "RoHS"],
+    "commodities":          ["ISO 9001", "sustainability certifications (Rainforest Alliance, etc.)", "ISO 14001"],
+    # Fallback for unlisted categories
+    "default":              ["ISO 9001 (quality)", "ISO 14001 (environmental)", "SA8000 (labour standards)", "ISO 28001 (supply chain security)"],
+}
+
 # ── Country Risk Scores ───────────────────────────────────────
 # 0.0 = no risk · 1.0 = maximum risk
 # Countries not in this dict fall back to the geo_concentration

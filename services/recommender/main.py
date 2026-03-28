@@ -3,7 +3,7 @@ from pathlib import Path
 _ROOT = Path(__file__).resolve().parents[2]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
-from config import CURRENT_YEAR, MEDIUM_THRESHOLD
+from config import CURRENT_YEAR, MEDIUM_THRESHOLD, CATEGORY_CERTIFICATIONS
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -53,6 +53,47 @@ def serper_search(query: str, num: int = 4) -> list:
     except Exception as e:
         logger.warning(f"Serper search failed for '{query}': {e}")
         return []
+
+
+def get_category_certifications(category: str) -> list:
+    """Return industry certifications for a given category (case-insensitive, partial match)."""
+    cat_lower = category.lower().strip()
+    for key in CATEGORY_CERTIFICATIONS:
+        if key in cat_lower or cat_lower in key:
+            return CATEGORY_CERTIFICATIONS[key]
+    return CATEGORY_CERTIFICATIONS["default"]
+
+
+def extract_named_companies(snippets: list, exclude_name: str) -> list:
+    """
+    Pull capitalised proper-noun company names from web snippets.
+    Excludes the current supplier name to avoid recommending themselves.
+    Returns up to 5 unique names.
+    """
+    import re
+    exclude = exclude_name.upper()
+    candidates = set()
+    # Match sequences of Title-Case words (2-4 words) likely to be company names
+    pattern = re.compile(r'\b([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){1,3})\b')
+    # Words that are clearly not company names
+    noise = {
+        "Supply", "Chain", "Risk", "Management", "Global", "International",
+        "Alternative", "Supplier", "Suppliers", "Company", "Group", "The",
+        "This", "These", "Their", "Based", "According", "With", "From",
+        "Industry", "Market", "Report", "North", "South", "East", "West",
+        "United", "States", "Kingdom", "Europe", "Asia", "Pacific",
+    }
+    for s in snippets:
+        text = s.get("snippet", "") + " " + s.get("title", "")
+        for match in pattern.findall(text):
+            words = match.split()
+            if any(w in noise for w in words):
+                continue
+            if exclude in match.upper():
+                continue
+            if len(match) > 5:
+                candidates.add(match.strip())
+    return sorted(candidates)[:5]
 
 
 def build_search_queries(supplier_name: str, country: str, category: str,
@@ -113,6 +154,20 @@ def build_search_queries(supplier_name: str, country: str, category: str,
     else:
         queries.append(f"{category} supplier audit standards compliance certification {country}")
 
+    # Query 4: Named alternative suppliers (always) — find actual company names
+    # Target low-risk alternative countries based on current supplier's country
+    alt_regions = {
+        "CHINA": "Germany OR Japan OR South Korea OR Taiwan",
+        "RUSSIA": "Germany OR Poland OR Czech Republic OR Finland",
+        "INDIA": "Germany OR Malaysia OR Vietnam OR Mexico",
+        "VIETNAM": "Malaysia OR Thailand OR Mexico OR Poland",
+        "MEXICO": "USA OR Canada OR Germany OR Poland",
+        "BANGLADESH": "Vietnam OR Indonesia OR Ethiopia OR Portugal",
+    }.get(country.upper(), "Germany OR USA OR Japan OR South Korea")
+    queries.append(
+        f'top "{category}" manufacturers suppliers ({alt_regions}) certified list {CURRENT_YEAR}'
+    )
+
     return queries
 
 
@@ -129,41 +184,67 @@ def gather_web_intelligence(supplier_name: str, country: str, category: str,
     # while avoiding threadpool/no-op network call overhead.
     if not get_serper_key():
         return {
-            "sources":         [],
-            "alternatives":    [],
-            "audit_standards": [],
-            "geopolitical":    [],
-            "top_driver":      top_driver,
-            "queries_used":    queries,
+            "sources":            [],
+            "alternatives":       [],
+            "audit_standards":    [],
+            "geopolitical":       [],
+            "named_alternatives": [],
+            "top_driver":         top_driver,
+            "queries_used":       queries,
         }
 
     # Network-bound searches run concurrently to reduce end-to-end latency.
-    # We preserve query order by using executor.map.
     with ThreadPoolExecutor(max_workers=min(4, len(queries) or 1)) as ex:
         results_per_query = list(ex.map(serper_search, queries))
-    alts   = results_per_query[0]
-    audits = results_per_query[2] if len(results_per_query) > 2 else []
-    geo    = results_per_query[1] if len(results_per_query) > 1 else []
+    alts        = results_per_query[0]
+    geo         = results_per_query[1] if len(results_per_query) > 1 else []
+    audits      = results_per_query[2] if len(results_per_query) > 2 else []
+    named_srcs  = results_per_query[3] if len(results_per_query) > 3 else []
 
     all_sources = [r for bucket in results_per_query for r in bucket]
 
+    # Extract actual company names from the named-alternatives search results
+    named_alternatives = extract_named_companies(named_srcs + alts, supplier_name)
+
     return {
-        "sources":         all_sources,
-        "alternatives":    alts,
-        "audit_standards": audits,
-        "geopolitical":    geo,
-        "top_driver":      top_driver,
-        "queries_used":    queries,
+        "sources":            all_sources,
+        "alternatives":       alts,
+        "audit_standards":    audits,
+        "geopolitical":       geo,
+        "named_alternatives": named_alternatives,
+        "top_driver":         top_driver,
+        "queries_used":       queries,
     }
 
 
 # ── Prompt builder ────────────────────────────────────────────
 def build_system_prompt() -> str:
     return (
-        "You are a senior supply chain risk consultant with 20 years of experience. "
-        "Generate specific, actionable mitigation recommendations based strictly on "
-        "the data provided. Cite web sources where available. Return only valid JSON."
+        "You are a senior supply chain risk consultant with 20 years of experience in "
+        "procurement risk, OFAC compliance, and supplier diversification.\n\n"
+        "CRITICAL RULES FOR SPECIFICITY — every recommendation MUST follow these:\n"
+        "1. NAME actual alternative suppliers from the provided list (e.g. 'qualify Siemens AG "
+        "(Germany) or Kyocera (Japan) as alternatives') — never say 'find alternative suppliers'.\n"
+        "2. NAME specific certifications from the provided list (e.g. 'obtain ISO 9001 and IATF 16949') "
+        "— never say 'get audited' or 'obtain relevant certifications'.\n"
+        "3. QUANTIFY where possible: use the annual spend to estimate safety stock cost, "
+        "switching cost, or risk exposure in USD.\n"
+        "4. NAME specific contract clauses (e.g. 'add a Force Majeure clause covering [country] "
+        "political risk, a Dual-Source obligation clause, and a 30-day priority allocation guarantee').\n"
+        "5. For geographic risk, NAME the specific alternative countries and explain why they are "
+        "lower risk (e.g. 'Vietnam (score 0.35) or Malaysia (score 0.35) vs current China (score 0.55)').\n"
+        "6. Each rationale must reference the ACTUAL risk scores/components provided — "
+        "not generic supply chain theory.\n\n"
+        "Return only valid JSON — no markdown, no preamble."
     )
+
+
+def _safety_stock_cost(annual_spend: float, days: int) -> str:
+    """Estimate working capital cost of N days safety stock from annual spend."""
+    if not annual_spend or annual_spend <= 0:
+        return ""
+    cost = annual_spend * (days / 365)
+    return f"~${cost:,.0f} in working capital (at ${annual_spend:,.0f}/yr spend)"
 
 
 def build_user_prompt(req: dict, web: dict) -> str:
@@ -174,6 +255,23 @@ def build_user_prompt(req: dict, web: dict) -> str:
     on_time_t = f"{float(on_time):.0f}%" if on_time is not None else "not specified"
     years    = req.get("years_in_relationship")
     years_t  = f"{years} years" if years else "not specified"
+
+    # Certifications for this category
+    category = req.get("category", "")
+    certs    = get_category_certifications(category)
+    certs_t  = ", ".join(certs)
+
+    # Named alternative suppliers found in web search
+    named_alts = web.get("named_alternatives", [])
+    named_alts_t = (
+        "Named candidates from web search: " + ", ".join(named_alts)
+        if named_alts else "None found — use your knowledge to name 2-3 real companies"
+    )
+
+    # Safety stock cost estimate
+    stock_30  = _safety_stock_cost(spend, 30)
+    stock_60  = _safety_stock_cost(spend, 60)
+    stock_t   = f"30-day buffer ≈ {stock_30} | 60-day buffer ≈ {stock_60}" if stock_30 else "spend not provided"
 
     # Custom weight note
     cw = req.get("custom_weights") or {}
@@ -215,9 +313,18 @@ SUPPLIER RISK DATA:
 BUYER COMPANY:
   Name:           {req.get('company_name', 'Your Company')} | Industry: {req.get('company_industry', 'N/A')}
   Annual Spend:   {spend_t}
+  Safety Stock Cost: {stock_t}
   Sole Source:    {req.get('sole_source', False)} | Tier Level: {req.get('tier_level') or 'N/A'}
   On-Time Delivery: {on_time_t} | Financial Health: {req.get('financial_health') or 'N/A'}
   Relationship:   {years_t} | Contract Expiry: {req.get('contract_expiry') or 'N/A'}
+
+INDUSTRY CERTIFICATIONS FOR THIS CATEGORY ({category}):
+  {certs_t}
+  → Use these exact certification names in your recommendations. Do NOT say "relevant certifications".
+
+NAMED ALTERNATIVE SUPPLIERS (from live web search):
+  {named_alts_t}
+  → Name at least 2 of these (or known real companies) in your alternative supplier recommendations.
 
 RISK SUMMARY (from SummarizerAgent):
   {req.get('summary', '').replace(chr(10), ' ')[:600]}
@@ -228,24 +335,25 @@ KEY CONCERNS:
 INFORMATION GAPS:
 {gaps_t}
 
-WEB INTELLIGENCE (use these to inform alternatives and audit recommendations):
+WEB INTELLIGENCE (snippets — cite URLs in source fields):
 {snippets}
 
 TASK:
-Generate exactly 3 IMMEDIATE actions (executable within 30 days) and 3 LONG-TERM actions (3-18 month horizon).
+Generate exactly 3 IMMEDIATE actions (within 30 days) and 3 LONG-TERM actions (3-18 months).
 
-Focus on:
-1. The highest-scoring risk components — these drive the most value to fix
-2. Cost-risk proportionality — higher annual spend justifies more aggressive mitigation
-3. Concrete alternatives found in web intelligence — name them specifically if found
-4. Address identified information gaps
+Specificity requirements:
+- Name actual alternative supplier companies (not "find alternatives")
+- Name actual certifications from the list above (not "get certified")
+- Reference actual risk scores in rationales (e.g. "geography score 0.72 indicates...")
+- Include safety stock cost estimate in any buffer stock recommendation
+- Name specific contract clause types (Force Majeure, Dual-Source obligation, etc.)
 
 Return ONLY valid JSON (no markdown, no preamble):
 {{
   "immediate_actions": [
     {{
       "action": "concise action title (max 12 words)",
-      "rationale": "why this is critical given the specific risk data (2-3 sentences)",
+      "rationale": "specific reasoning referencing actual scores, company names, or cost figures (2-3 sentences)",
       "priority": "HIGH or MEDIUM",
       "source": "URL from web intelligence or 'Internal Analysis'"
     }}
@@ -253,12 +361,12 @@ Return ONLY valid JSON (no markdown, no preamble):
   "long_term_actions": [
     {{
       "action": "concise action title (max 12 words)",
-      "rationale": "root-cause reasoning tied to specific risk factors (2-3 sentences)",
+      "rationale": "root-cause reasoning with specific certifications, supplier names, or contract terms (2-3 sentences)",
       "timeline": "e.g. 3-6 months",
       "source": "URL from web intelligence or 'Internal Analysis'"
     }}
   ],
-  "top_recommendations_for_summary": "1-2 sentence executive statement of the single highest-priority action and expected risk reduction outcome"
+  "top_recommendations_for_summary": "1-2 sentence executive statement naming the single highest-priority action, the specific risk score driving it, and the expected outcome"
 }}
 """.strip()
 
