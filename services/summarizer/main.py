@@ -11,7 +11,7 @@ from pydantic import BaseModel
 import requests, os, time, logging
 from dotenv import load_dotenv
 
-load_dotenv(r"C:\Users\KAVISH\supplyshield_final\.env", override=False)
+load_dotenv(override=False)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("summarizer")
 

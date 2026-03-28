@@ -20,7 +20,7 @@ SERPER_URL  = "https://google.serper.dev/search"
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 GROQ_MODEL   = "llama-3.3-70b-versatile"
 
-load_dotenv(r"C:\Users\KAVISH\supplyshield_final\.env", override=False)
+load_dotenv(override=False)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("geointel")
@@ -71,7 +71,7 @@ def _serper_search(query: str, num: int = 5) -> list:
             SERPER_URL,
             headers={"X-API-KEY": key, "Content-Type": "application/json"},
             json={"q": query, "num": num},
-            timeout=10,
+            timeout=25,
         )
         resp.raise_for_status()
         return [

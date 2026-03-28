@@ -13,7 +13,7 @@ from typing import Optional
 from dotenv import load_dotenv
 from concurrent.futures import ThreadPoolExecutor
 
-load_dotenv(r"C:\Users\KAVISH\supplyshield_final\.env", override=False)
+load_dotenv(override=False)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("recommender")
 
@@ -43,7 +43,7 @@ def serper_search(query: str, num: int = 4) -> list:
             SERPER_URL,
             headers={"X-API-KEY": key, "Content-Type": "application/json"},
             json={"q": query, "num": num},
-            timeout=10,
+            timeout=25,
         )
         resp.raise_for_status()
         return [

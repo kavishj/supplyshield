@@ -17,7 +17,7 @@ from datetime import date
 
 DB_PATH = Path(os.getenv("DB_PATH", r"C:\Users\KAVISH\supplyshield_final\data\suppliers.db"))
 
-load_dotenv(r"C:\Users\KAVISH\supplyshield_final\.env", override=False)
+load_dotenv(override=False)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("orchestrator")
