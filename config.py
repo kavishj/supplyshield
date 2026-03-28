@@ -47,6 +47,33 @@ ONBOARDED_WEIGHTS = {
     "contract_expiry":  0.07,
 }
 
+# ── Expanded weights — 13-factor model ────────────────────────
+# Applied when any of the 6 new performance/governance metrics are provided.
+# Incorporates: fill rate (OTIF), lead-time variability, audit pass rate,
+# supplier improvement index, cyber posture, and disruption frequency.
+# Weights sum to 1.00.
+EXPANDED_WEIGHTS = {
+    "geography":             0.14,
+    "news":                  0.12,
+    "single_source":         0.07,
+    "lead_time":             0.06,
+    "financial_health":      0.09,
+    "on_time_delivery":      0.07,
+    "contract_expiry":       0.04,
+    # New metrics (6)
+    "order_fill_rate":       0.08,   # OTIF — in-full delivery performance
+    "lead_time_variability": 0.06,   # consistency of delivery timing
+    "audit_pass_rate":       0.09,   # compliance & governance track record
+    "improvement_index":     0.05,   # corrective action closure rate
+    "cyber_posture":         0.07,   # cybersecurity risk exposure
+    "disruption_frequency":  0.06,   # historical supply chain incidents/yr
+}
+
+# ── Score maps for new metrics ─────────────────────────────────
+CYBER_POSTURE_MAP = {"Poor": 0.85, "Fair": 0.40, "Good": 0.05}
+
+LEAD_TIME_VARIABILITY_MAP = {"Low": 0.0, "Medium": 0.40, "High": 0.80}
+
 # ── OFAC Screening ────────────────────────────────────────────
 OFAC_SIMILARITY_THRESHOLD = 85    # % minimum fuzzy-match score (RapidFuzz token_set_ratio)
 OFAC_MAX_MATCHES           = 10   # maximum SDN matches returned per supplier

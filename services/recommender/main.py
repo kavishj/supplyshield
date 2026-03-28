@@ -303,13 +303,40 @@ def build_user_prompt(req: dict, web: dict) -> str:
     delta_t    = f" (Δ {delta:+.3f})" if delta is not None else ""
     trend_line = f"  Score Trend:   {trend}{delta_t}\n" if trend != "STABLE" else ""
 
+    # Build extended metrics block only if any are provided
+    ext_lines = []
+    if req.get("order_fill_rate") is not None:
+        ext_lines.append(f"  Order Fill Rate (OTIF):    {req['order_fill_rate']:.0f}%")
+    if req.get("lead_time_variability"):
+        ext_lines.append(f"  Lead Time Variability:     {req['lead_time_variability']}")
+    if req.get("audit_pass_rate") is not None:
+        ext_lines.append(f"  Audit Pass Rate:           {req['audit_pass_rate']:.0f}%")
+    if req.get("improvement_index") is not None:
+        ext_lines.append(f"  Improvement Index (CA%):   {req['improvement_index']:.0f}%")
+    if req.get("cyber_posture"):
+        ext_lines.append(f"  Cyber Posture:             {req['cyber_posture']}")
+    if req.get("disruption_frequency") is not None:
+        ext_lines.append(f"  Disruption Frequency:      {req['disruption_frequency']} incidents/yr")
+    ext_block = ("\nSUPPLIER PERFORMANCE METRICS:\n" + "\n".join(ext_lines)) if ext_lines else ""
+
+    # Buyer resilience block
+    buyer_res_lines = []
+    if req.get("inventory_buffer_days") is not None:
+        buf = req["inventory_buffer_days"]
+        buf_risk = "CRITICAL (<14 days)" if buf < 14 else ("LOW (>60 days)" if buf > 60 else f"{buf} days — moderate")
+        buyer_res_lines.append(f"  Inventory Buffer:  {buf} days on-hand ({buf_risk})")
+    if req.get("has_rto_defined") is not None:
+        rto_note = "RTO defined (faster recovery expected)" if req["has_rto_defined"] else "No RTO defined — recovery time undefined (HIGH risk)"
+        buyer_res_lines.append(f"  Recovery Plan:     {rto_note}")
+    buyer_res_block = ("\nBUYER RESILIENCE POSTURE:\n" + "\n".join(buyer_res_lines)) if buyer_res_lines else ""
+
     return f"""
 SUPPLIER RISK DATA:
   Supplier:      {req['supplier_name']} | Country: {req['country']} | Category: {req['category']}
   Risk Score:    {req['risk_score']:.3f} | Category: {req['risk_category']}
   OFAC Status:   {req['ofac_status']} | News Risk: {req['news_risk']}
 {trend_line}  Components:    OFAC={comps.get('ofac',0):.2f} | Geo={comps.get('geography',0):.2f} | News={comps.get('news',0):.2f} | Single-Source={comps.get('single_source',0):.2f} | Lead-Time={comps.get('lead_time',0):.2f}{weight_note}
-
+{ext_block}
 BUYER COMPANY:
   Name:           {req.get('company_name', 'Your Company')} | Industry: {req.get('company_industry', 'N/A')}
   Annual Spend:   {spend_t}
@@ -317,6 +344,7 @@ BUYER COMPANY:
   Sole Source:    {req.get('sole_source', False)} | Tier Level: {req.get('tier_level') or 'N/A'}
   On-Time Delivery: {on_time_t} | Financial Health: {req.get('financial_health') or 'N/A'}
   Relationship:   {years_t} | Contract Expiry: {req.get('contract_expiry') or 'N/A'}
+{buyer_res_block}
 
 INDUSTRY CERTIFICATIONS FOR THIS CATEGORY ({category}):
   {certs_t}
@@ -590,6 +618,16 @@ class RecommendRequest(BaseModel):
     # Score trend (from orchestrator DB comparison)
     score_trend:           str             = "STABLE"   # IMPROVING / STABLE / DETERIORATING
     score_delta:           Optional[float] = None       # current - previous score
+    # New expanded metrics (13-factor model)
+    order_fill_rate:       Optional[float] = None
+    lead_time_variability: Optional[str]   = None
+    audit_pass_rate:       Optional[float] = None
+    improvement_index:     Optional[float] = None
+    cyber_posture:         Optional[str]   = None
+    disruption_frequency:  Optional[int]   = None
+    # Buyer resilience context
+    inventory_buffer_days: Optional[int]   = None
+    has_rto_defined:       Optional[bool]  = None
 
 
 # ── Endpoints ─────────────────────────────────────────────────

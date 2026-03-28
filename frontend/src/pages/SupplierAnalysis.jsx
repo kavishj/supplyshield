@@ -83,7 +83,6 @@ function RiskGauge({ score }) {
 
 // ── Risk breakdown bar chart ──────────────────────────────────────────────────
 const FACTOR_LABELS = {
-  ofac:          'OFAC Sanctions',
   geography:     'Geographic Conc.',
   news:          'News Sentiment',
   single_source: 'Single-Source',
@@ -253,9 +252,12 @@ export default function SupplierAnalysis() {
     lead_time:     prefill.lead_time     ?? 12,
     include_summary: true,
     include_recs:  false,
-    w_ofac: 35, w_geo: 25, w_news: 20, w_single: 10, w_lead: 10,
+    w_geo: 38, w_news: 31, w_single: 16, w_lead: 15,
   })
   const [showAdvanced, setShowAdvanced] = useState(false)
+  const [showWeights, setShowWeights] = useState(() => {
+    try { return localStorage.getItem('ss_showWeights') === 'true' } catch { return false }
+  })
   const [running,    setRunning]    = useState(false)
   const [result,     setResult]     = useState(null)
   const [error,      setError]      = useState('')
@@ -291,10 +293,10 @@ export default function SupplierAnalysis() {
   const set = k => v => setForm(p => ({ ...p, [k]: v }))
   const inp = k => e => setForm(p => ({ ...p, [k]: e.target.value }))
 
-  const weightTotal = form.w_ofac + form.w_geo + form.w_news + form.w_single + form.w_lead
-  const useCustomW  = (form.w_ofac !== 35 || form.w_geo !== 25 || form.w_news !== 20 || form.w_single !== 10 || form.w_lead !== 10)
+  const weightTotal = form.w_geo + form.w_news + form.w_single + form.w_lead
+  const useCustomW  = (form.w_geo !== 38 || form.w_news !== 31 || form.w_single !== 16 || form.w_lead !== 15)
   const customWeights = useCustomW
-    ? { ofac: form.w_ofac/100, geography: form.w_geo/100, news: form.w_news/100, single_source: form.w_single/100, lead_time: form.w_lead/100 }
+    ? { geography: form.w_geo/100, news: form.w_news/100, single_source: form.w_single/100, lead_time: form.w_lead/100 }
     : null
 
   const handleRun = async () => {
@@ -506,22 +508,35 @@ export default function SupplierAnalysis() {
                   </div>
                 </div>
 
-                {/* Custom weights */}
+                {/* Custom weights — nested toggle */}
                 <div className="mt-3 pt-3 border-t border-[rgba(163,177,198,0.3)]">
-                  <p className="text-[0.65rem] font-bold uppercase tracking-[1.2px] text-neu-muted mb-3">
-                    Custom Risk Weights (must sum to 100%)
-                    {weightTotal !== 100 && <span className="text-neu-risk-md ml-2">Currently: {weightTotal}%</span>}
-                  </p>
-                  <div className="grid grid-cols-5 gap-3">
-                    {[['w_ofac','OFAC %'],['w_geo','Geography %'],['w_news','News %'],['w_single','Single-Source %'],['w_lead','Lead Time %']].map(([k,l]) => (
-                      <div key={k}>
-                        <label className="block mb-1 text-[0.62rem] font-semibold uppercase tracking-wide text-neu-muted">{l}</label>
-                        <input type="number" min="0" max="100" step="5" value={form[k]}
-                          onChange={e => set(k)(parseInt(e.target.value) || 0)}
-                          className="neu-input !py-2 text-center text-sm" />
+                  <button
+                    onClick={() => {
+                      const next = !showWeights
+                      setShowWeights(next)
+                      try { localStorage.setItem('ss_showWeights', String(next)) } catch {}
+                    }}
+                    className="text-[0.7rem] text-neu-accent font-semibold hover:text-neu-accent-lt transition-colors mb-2">
+                    {showWeights ? '▲ Hide' : '▼ Custom'} Risk Weights
+                  </button>
+                  {showWeights && (
+                    <div>
+                      <p className="text-[0.62rem] text-neu-muted mb-3">
+                        Must sum to 100%
+                        {weightTotal !== 100 && <span className="text-neu-risk-md ml-2">· Currently: {weightTotal}%</span>}
+                      </p>
+                      <div className="grid grid-cols-4 gap-3">
+                        {[['w_geo','Geography %'],['w_news','News %'],['w_single','Single-Source %'],['w_lead','Lead Time %']].map(([k,l]) => (
+                          <div key={k}>
+                            <label className="block mb-1 text-[0.62rem] font-semibold uppercase tracking-wide text-neu-muted">{l}</label>
+                            <input type="number" min="0" max="100" step="1" value={form[k]}
+                              onChange={e => set(k)(parseInt(e.target.value) || 0)}
+                              className="neu-input !py-2 text-center text-sm" />
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -756,7 +771,7 @@ export default function SupplierAnalysis() {
                       <p className="text-[0.65rem] font-bold uppercase tracking-[1.2px] text-neu-muted mb-3">Component Breakdown</p>
                       <BreakdownChart
                         components={result.risk_components ?? {}}
-                        weights={result.risk_weights ?? { ofac:0.35,geography:0.25,news:0.2,single_source:0.1,lead_time:0.1 }}
+                        weights={result.risk_weights ?? { geography:0.38,news:0.31,single_source:0.16,lead_time:0.15 }}
                         score={result.risk_score}
                       />
                     </div>

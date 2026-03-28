@@ -46,7 +46,7 @@ class AnalyzeRequest(BaseModel):
     # Company context for recommender
     company_name_buyer:     Optional[str]   = None
     company_industry:       Optional[str]   = None
-    # Onboarded supplier extended fields
+    # Onboarded supplier extended fields (7-factor)
     annual_spend_usd:       Optional[float] = None
     sole_source_onboarded:  Optional[bool]  = None
     tier_level:             Optional[str]   = None
@@ -54,6 +54,16 @@ class AnalyzeRequest(BaseModel):
     years_in_relationship:  Optional[int]   = None
     financial_health:       Optional[str]   = None
     contract_expiry:        Optional[str]   = None
+    # New expanded fields (13-factor)
+    order_fill_rate:        Optional[float] = None   # OTIF in-full %, 0–100
+    lead_time_variability:  Optional[str]   = None   # Low / Medium / High
+    audit_pass_rate:        Optional[float] = None   # compliance audit pass %, 0–100
+    improvement_index:      Optional[float] = None   # corrective action closure %, 0–100
+    cyber_posture:          Optional[str]   = None   # Poor / Fair / Good
+    disruption_frequency:   Optional[int]   = None   # supply chain incidents/yr
+    # Buyer-side resilience context (not scored — fed to recommender)
+    inventory_buffer_days:  Optional[int]   = None   # days of supply on hand
+    has_rto_defined:        Optional[bool]  = None   # Recovery Time Objective documented
 
 
 class RecommendOnlyRequest(BaseModel):
@@ -80,6 +90,14 @@ class RecommendOnlyRequest(BaseModel):
     years_in_relationship:  Optional[int]   = None
     financial_health:       Optional[str]   = None
     contract_expiry:        Optional[str]   = None
+    order_fill_rate:        Optional[float] = None
+    lead_time_variability:  Optional[str]   = None
+    audit_pass_rate:        Optional[float] = None
+    improvement_index:      Optional[float] = None
+    cyber_posture:          Optional[str]   = None
+    disruption_frequency:   Optional[int]   = None
+    inventory_buffer_days:  Optional[int]   = None
+    has_rto_defined:        Optional[bool]  = None
 
 
 def call_agent(url: str, payload: dict, timeout: int = 15) -> dict:
@@ -339,6 +357,19 @@ def analyze(req: AnalyzeRequest):
         riskcalc_payload["contract_days_remaining"] = _contract_days_remaining(req.contract_expiry)
     if req.tier_level:
         riskcalc_payload["tier_level"] = req.tier_level
+    # New 13-factor expanded metrics
+    if req.order_fill_rate is not None:
+        riskcalc_payload["order_fill_rate"] = req.order_fill_rate
+    if req.lead_time_variability:
+        riskcalc_payload["lead_time_variability"] = req.lead_time_variability
+    if req.audit_pass_rate is not None:
+        riskcalc_payload["audit_pass_rate"] = req.audit_pass_rate
+    if req.improvement_index is not None:
+        riskcalc_payload["improvement_index"] = req.improvement_index
+    if req.cyber_posture:
+        riskcalc_payload["cyber_posture"] = req.cyber_posture
+    if req.disruption_frequency is not None:
+        riskcalc_payload["disruption_frequency"] = req.disruption_frequency
 
     try:
         risk = call_agent(f"{RISKCALC_URL}/score", riskcalc_payload)
@@ -434,6 +465,16 @@ def analyze(req: AnalyzeRequest):
                 "contract_expiry":      req.contract_expiry,
                 "score_trend":          score_trend,
                 "score_delta":          score_delta,
+                # New expanded metrics (for specific recommendations)
+                "order_fill_rate":      req.order_fill_rate,
+                "lead_time_variability": req.lead_time_variability,
+                "audit_pass_rate":      req.audit_pass_rate,
+                "improvement_index":    req.improvement_index,
+                "cyber_posture":        req.cyber_posture,
+                "disruption_frequency": req.disruption_frequency,
+                # Buyer resilience context
+                "inventory_buffer_days": req.inventory_buffer_days,
+                "has_rto_defined":       req.has_rto_defined,
             }
             rec_result = call_agent(f"{RECOMMENDER_URL}/recommend", rec_payload, timeout=120)
             agents_log.append({"agent": "RecommenderAgent", "status": "ok",

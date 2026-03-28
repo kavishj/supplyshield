@@ -3,8 +3,9 @@ from pathlib import Path
 _ROOT = Path(__file__).resolve().parents[2]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
-from config import (COUNTRY_RISK, DEFAULT_WEIGHTS, ONBOARDED_WEIGHTS,
-                    HIGH_THRESHOLD, MEDIUM_THRESHOLD)
+from config import (COUNTRY_RISK, DEFAULT_WEIGHTS, ONBOARDED_WEIGHTS, EXPANDED_WEIGHTS,
+                    HIGH_THRESHOLD, MEDIUM_THRESHOLD,
+                    CYBER_POSTURE_MAP, LEAD_TIME_VARIABILITY_MAP)
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -47,6 +48,53 @@ def _contract_expiry_score(days_remaining: Optional[int]) -> float:
     return 0.0
 
 
+# ── New metric scoring functions (13-factor model) ─────────────
+
+def _fill_rate_score(rate: float) -> float:
+    """Order fill rate / OTIF 'in-full' %  →  0.0–1.0 risk."""
+    rate = max(0.0, min(100.0, rate))
+    if rate >= 95: return 0.0
+    if rate >= 85: return 0.20
+    if rate >= 70: return 0.55
+    return 0.90
+
+
+def _lead_time_variability_score(variability: str) -> float:
+    """Low / Medium / High variability  →  0.0–1.0 risk."""
+    return LEAD_TIME_VARIABILITY_MAP.get(variability.strip().capitalize(), 0.40)
+
+
+def _audit_pass_rate_score(rate: float) -> float:
+    """Compliance audit pass rate %  →  0.0–1.0 risk."""
+    rate = max(0.0, min(100.0, rate))
+    if rate >= 90: return 0.0
+    if rate >= 75: return 0.30
+    if rate >= 60: return 0.60
+    return 0.90
+
+
+def _improvement_index_score(rate: float) -> float:
+    """Corrective-action closure rate %  →  0.0–1.0 risk."""
+    rate = max(0.0, min(100.0, rate))
+    if rate >= 85: return 0.0
+    if rate >= 65: return 0.30
+    if rate >= 45: return 0.60
+    return 0.85
+
+
+def _cyber_posture_score(posture: str) -> float:
+    """Poor / Fair / Good  →  0.0–1.0 risk."""
+    return CYBER_POSTURE_MAP.get(posture.strip().capitalize(), 0.40)
+
+
+def _disruption_frequency_score(incidents: int) -> float:
+    """Supply chain incidents in past 12 months  →  0.0–1.0 risk."""
+    if incidents <= 0: return 0.0
+    if incidents == 1: return 0.25
+    if incidents <= 3: return 0.55
+    return 0.90
+
+
 def _normalise_weights(w: dict) -> dict:
     """Ensure weights sum to 1.0. Falls back to DEFAULT_WEIGHTS if all zero."""
     total = sum(w.values())
@@ -65,11 +113,18 @@ class ScoreRequest(BaseModel):
     news_risk:             str             = "NONE"
     # Custom weights (from analysis form — override defaults if provided)
     custom_weights:        Optional[dict]  = None
-    # Extended onboarded-supplier fields
-    financial_health:      Optional[str]   = None   # Good / Fair / Poor
-    on_time_delivery_rate: Optional[float] = None   # 0–100 %
-    contract_days_remaining: Optional[int] = None   # days until expiry
-    tier_level:            Optional[str]   = None   # Tier 1 / 2 / 3
+    # Extended onboarded-supplier fields (7-factor model)
+    financial_health:        Optional[str]   = None   # Good / Fair / Poor
+    on_time_delivery_rate:   Optional[float] = None   # 0–100 %
+    contract_days_remaining: Optional[int]   = None   # days until expiry
+    tier_level:              Optional[str]   = None   # Tier 1 / 2 / 3
+    # New expanded fields (13-factor model)
+    order_fill_rate:         Optional[float] = None   # OTIF in-full %, 0–100
+    lead_time_variability:   Optional[str]   = None   # Low / Medium / High
+    audit_pass_rate:         Optional[float] = None   # compliance audit pass %, 0–100
+    improvement_index:       Optional[float] = None   # corrective action closure %, 0–100
+    cyber_posture:           Optional[str]   = None   # Poor / Fair / Good
+    disruption_frequency:    Optional[int]   = None   # supply chain incidents per year
 
 
 @app.get("/health")
@@ -107,25 +162,47 @@ def score(req: ScoreRequest):
         req.on_time_delivery_rate is not None,
         req.contract_days_remaining is not None,
     ])
+    has_expanded = any([
+        req.order_fill_rate is not None,
+        req.lead_time_variability is not None,
+        req.audit_pass_rate is not None,
+        req.improvement_index is not None,
+        req.cyber_posture is not None,
+        req.disruption_frequency is not None,
+    ])
 
     if req.custom_weights:
-        # User-supplied weights — normalise and use directly
-        # Support both standard and extended keys
         raw_weights = {k: float(v) for k, v in req.custom_weights.items() if float(v) > 0}
         weights = _normalise_weights(raw_weights)
+    elif has_expanded:
+        weights = dict(EXPANDED_WEIGHTS)
     elif has_extended:
         weights = dict(ONBOARDED_WEIGHTS)
     else:
         weights = dict(DEFAULT_WEIGHTS)
 
-    # ── Extended onboarded components ─────────────────────────
-    if has_extended or req.custom_weights:
+    # ── Extended + expanded components ────────────────────────
+    if has_extended or has_expanded or req.custom_weights:
+        # 7-factor onboarded fields
         if req.financial_health is not None:
             components["financial_health"] = FINANCIAL_HEALTH_MAP.get(req.financial_health, 0.4)
         if req.on_time_delivery_rate is not None:
             components["on_time_delivery"] = _on_time_score(req.on_time_delivery_rate)
         if req.contract_days_remaining is not None:
             components["contract_expiry"] = _contract_expiry_score(req.contract_days_remaining)
+        # 13-factor expanded fields
+        if req.order_fill_rate is not None:
+            components["order_fill_rate"] = _fill_rate_score(req.order_fill_rate)
+        if req.lead_time_variability is not None:
+            components["lead_time_variability"] = _lead_time_variability_score(req.lead_time_variability)
+        if req.audit_pass_rate is not None:
+            components["audit_pass_rate"] = _audit_pass_rate_score(req.audit_pass_rate)
+        if req.improvement_index is not None:
+            components["improvement_index"] = _improvement_index_score(req.improvement_index)
+        if req.cyber_posture is not None:
+            components["cyber_posture"] = _cyber_posture_score(req.cyber_posture)
+        if req.disruption_frequency is not None:
+            components["disruption_frequency"] = _disruption_frequency_score(req.disruption_frequency)
 
     # ── Final score ────────────────────────────────────────────
     score_val = round(
@@ -159,7 +236,7 @@ def score(req: ScoreRequest):
         "recommendation":    rec,
         "components":        components,
         "weights":           weights,
-        "weights_mode":      "custom" if req.custom_weights else ("onboarded" if has_extended else "standard"),
+        "weights_mode":      "custom" if req.custom_weights else ("expanded" if has_expanded else ("onboarded" if has_extended else "standard")),
         "approval_required": score_val >= HIGH_THRESHOLD,
         "elapsed_ms":        elapsed,
     }
