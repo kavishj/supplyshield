@@ -164,10 +164,10 @@ export default function SupplierWorldMap({ suppliers = [], homeCountry = '' }) {
   // ── Theme: sphere + geo colours blend into the page surface ──────────────────
   // Sphere matches neu-base exactly so it's invisible
   const sphereColor  = dark ? '#1E293B' : '#E0E5EC'
-  // Countries: very subtle lift from the background
-  const geoFill      = dark ? '#1A2840' : '#D4DCE6'
-  const geoBorder    = dark ? '#243347' : '#C2CADA'
-  const graticuleC   = dark ? 'rgba(255,255,255,0.025)' : 'rgba(0,0,0,0.03)'
+  // Countries: lightened from background so landmasses are visible
+  const geoFill      = dark ? '#2C4060' : '#D4DCE6'
+  const geoBorder    = dark ? '#3A5278' : '#C2CADA'
+  const graticuleC   = dark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)'
 
   // ── Tooltip helpers ───────────────────────────────────────────────────────────
   const showTip = (e, label, country, score) => {
@@ -236,7 +236,7 @@ export default function SupplierWorldMap({ suppliers = [], homeCountry = '' }) {
                   strokeWidth={0.35}
                   style={{
                     default: { outline: 'none' },
-                    hover:   { outline: 'none', fill: dark ? '#2A3F5A' : '#C0CDD8' },
+                    hover:   { outline: 'none', fill: dark ? '#3D5A80' : '#C0CDD8' },
                     pressed: { outline: 'none' },
                   }}
                 />
