@@ -16,9 +16,12 @@ from rapidfuzz import process, fuzz
 from newsapi import NewsApiClient
 from dotenv import load_dotenv
 
-SERPER_URL  = "https://google.serper.dev/search"
+SERPER_URL   = "https://google.serper.dev/search"
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 GROQ_MODEL   = "llama-3.3-70b-versatile"
+OFAC_SDN_URL = "https://www.treasury.gov/ofac/downloads/sdn.csv"
+SDN_PATH     = Path("/app/data/sdn.csv")
+SDN_MAX_AGE_DAYS = 7
 
 load_dotenv(override=False)
 
@@ -35,21 +38,56 @@ _sdn_df = None
 _sdn_names = None
 _news_client = None
 
-def get_sdn():
+
+def _download_sdn() -> bool:
+    """Download latest SDN CSV from OFAC. Returns True if successful."""
+    try:
+        logger.info(f"Downloading SDN list from {OFAC_SDN_URL} ...")
+        SDN_PATH.parent.mkdir(parents=True, exist_ok=True)
+        resp = requests.get(OFAC_SDN_URL, timeout=60, stream=True)
+        resp.raise_for_status()
+        with open(SDN_PATH, "wb") as f:
+            for chunk in resp.iter_content(chunk_size=65536):
+                f.write(chunk)
+        logger.info(f"SDN list downloaded → {SDN_PATH} ({SDN_PATH.stat().st_size:,} bytes)")
+        return True
+    except Exception as e:
+        logger.warning(f"SDN download failed: {e}")
+        return False
+
+
+def _sdn_needs_refresh() -> bool:
+    if not SDN_PATH.exists():
+        return True
+    age_days = (time.time() - SDN_PATH.stat().st_mtime) / 86400
+    return age_days > SDN_MAX_AGE_DAYS
+
+
+def _load_sdn_from_disk():
     global _sdn_df, _sdn_names
-    if _sdn_df is not None:
-        return _sdn_df, _sdn_names
-    for p in [Path("/app/data/sdn.csv"), Path("../../data/sdn.csv"),
-              Path("data/sdn.csv"), Path(r"C:\Users\KAVISH\supplyshield_final\data\sdn.csv")]:
+    # Try canonical Docker path first, then fallbacks for local dev
+    candidates = [SDN_PATH, Path("../../data/sdn.csv"),
+                  Path("data/sdn.csv"), Path(r"C:\Users\KAVISH\supplyshield_final\data\sdn.csv")]
+    for p in candidates:
         if p.exists():
             df = pd.read_csv(p, names=SDN_COLUMNS, header=None, dtype=str, on_bad_lines="skip")
             df["name"] = df["name"].fillna("").str.upper().str.strip()
             _sdn_df    = df
             _sdn_names = df["name"].tolist()
             logger.info(f"Loaded {len(df):,} SDN records from {p}")
-            return _sdn_df, _sdn_names
+            return
     _sdn_df    = pd.DataFrame(columns=SDN_COLUMNS)
     _sdn_names = []
+    logger.warning("SDN list not found — OFAC screening will be unavailable")
+
+
+def get_sdn():
+    global _sdn_df, _sdn_names
+    if _sdn_df is not None:
+        return _sdn_df, _sdn_names
+    if _sdn_needs_refresh():
+        _download_sdn()
+    _load_sdn_from_disk()
     return _sdn_df, _sdn_names
 
 def get_news_client():
@@ -239,13 +277,30 @@ async def startup():
 @app.get("/health")
 def health():
     df, _ = get_sdn()
+    age_days = round((time.time() - SDN_PATH.stat().st_mtime) / 86400, 1) if SDN_PATH.exists() else None
     return {
         "agent":              "GeoIntelAgent",
         "status":             "healthy",
         "sdn_records":        len(df),
+        "sdn_age_days":       age_days,
         "newsapi_configured": bool(os.getenv("NEWSAPI_KEY", "")),
         "fuzzy_matching":     True,
     }
+
+
+@app.post("/refresh-sdn")
+def refresh_sdn():
+    """Force download the latest SDN list from OFAC and reload into memory."""
+    global _sdn_df, _sdn_names
+    _sdn_df = None
+    _sdn_names = None
+    ok = _download_sdn()
+    if not ok:
+        raise HTTPException(502, "Failed to download SDN list from OFAC. Check network connectivity.")
+    _load_sdn_from_disk()
+    df, _ = get_sdn()
+    return {"success": True, "sdn_records": len(df)}
+
 
 @app.post("/screen")
 def screen(req: ScreenRequest):
@@ -313,7 +368,7 @@ def screen(req: ScreenRequest):
                 elif len(news_headlines) >= NEWS_MEDIUM_MIN_HEADLINES:
                     news_risk = "MEDIUM"
                 else:
-                    news_risk = "LOW"
+                    news_risk = "NONE"
             else:
                 news_error = "NewsAPI key not configured"
 
