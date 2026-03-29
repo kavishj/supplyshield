@@ -97,9 +97,7 @@ function NotifyModal({ supplier, riskCat, onClose }) {
       : `Your organisation has been flagged as MEDIUM RISK. Please review the action items below and respond promptly.`
   )
   const immediateDefaults = (supplier.immediate_actions ?? []).map(a => a.action ?? a)
-  const longTermDefaults  = (supplier.long_term_actions  ?? []).map(a => a.action ?? a)
   const [immediateText, setImmediateText] = useState(immediateDefaults.join('\n'))
-  const [longTermText,  setLongTermText]  = useState(longTermDefaults.join('\n'))
   const [sendErr,  setSendErr]  = useState('')
 
   // On mount: lookup supplier id then check account
@@ -159,7 +157,7 @@ function NotifyModal({ supplier, riskCat, onClose }) {
         risk_category:     riskCat,
         message,
         immediate_actions: parseLines(immediateText).map(a => ({ action: a })),
-        long_term_actions: parseLines(longTermText).map(a => ({ action: a })),
+        long_term_actions: [],
       })
       setStep('done')
       toast(`Notification sent to ${supplier.name}.`, 'success')
@@ -251,18 +249,6 @@ function NotifyModal({ supplier, riskCat, onClose }) {
                 rows={4}
                 value={immediateText}
                 onChange={e => setImmediateText(e.target.value)}
-                placeholder="Each action on a new line…"
-                className="neu-input text-[0.8rem] w-full resize-none"
-              />
-            </div>
-            <div className="mb-4">
-              <label className="block text-[0.72rem] font-bold uppercase tracking-wider text-amber-400 mb-1">
-                Long-term Actions (one per line)
-              </label>
-              <textarea
-                rows={3}
-                value={longTermText}
-                onChange={e => setLongTermText(e.target.value)}
                 placeholder="Each action on a new line…"
                 className="neu-input text-[0.8rem] w-full resize-none"
               />

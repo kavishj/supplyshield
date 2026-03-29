@@ -106,9 +106,6 @@ function NotificationCard({ notif, onRead, onDocUploaded }) {
   const immediateItems = notif.immediate_actions
     ? (Array.isArray(notif.immediate_actions) ? notif.immediate_actions : JSON.parse(notif.immediate_actions))
     : []
-  const longTermItems = notif.long_term_actions
-    ? (Array.isArray(notif.long_term_actions) ? notif.long_term_actions : JSON.parse(notif.long_term_actions))
-    : []
 
   return (
     <div className={`neu-card p-0 overflow-hidden transition-all ${!notif.is_read ? 'ring-1 ring-neu-accent/40' : ''}`}>
@@ -166,21 +163,6 @@ function NotificationCard({ notif, onRead, onDocUploaded }) {
             </div>
           )}
 
-          {longTermItems.length > 0 && (
-            <div className="mt-4">
-              <p className="text-[0.72rem] font-bold uppercase tracking-wider text-amber-400 mb-2">
-                Long-term Actions
-              </p>
-              <ul className="space-y-1.5">
-                {longTermItems.map((item, i) => (
-                  <li key={i} className="flex items-start gap-2 text-[0.8rem] text-neu-fg">
-                    <span className="mt-1 w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
-                    {typeof item === 'string' ? item : (item.action ?? JSON.stringify(item))}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
 
           <UploadSection
             notificationId={notif.id}
