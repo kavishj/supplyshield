@@ -15,10 +15,13 @@ The Streamlit app is untouched — both services share the same SQLite DB.
 
 import hashlib
 import json
+import logging
 import os
 import sqlite3
 import sys
 import time
+import urllib.parse
+from collections import defaultdict
 from io import BytesIO
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -27,7 +30,7 @@ import jwt
 import pyotp
 import qrcode
 import requests as req
-from fastapi import Depends, FastAPI, Form, HTTPException, UploadFile, File
+from fastapi import Body, Depends, FastAPI, Form, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -40,7 +43,10 @@ if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 from utils.pdf_export import generate_supplier_pdf  # noqa: E402
-from config import DEFAULT_WEIGHTS  # noqa: E402
+from config import DEFAULT_WEIGHTS, HIGH_THRESHOLD  # noqa: E402
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("bff")
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 DATA_DIR      = _ROOT / "data"
@@ -154,6 +160,11 @@ def _migrate_db():
         conn.commit()
 
 _migrate_db()
+
+
+def _norm_dec(d: str) -> str:
+    """Normalise gate decision strings (underscores → spaces, uppercase)."""
+    return d.replace("_", " ").upper() if d else ""
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -492,25 +503,73 @@ async def excel_upload(file: UploadFile = File(...), _user: dict = Depends(requi
                 cat_val     = row.get("supply_category", "Other")
                 category    = str(cat_val).strip() if pd.notna(cat_val) else "Other"
 
+                def _str(k):
+                    v = row.get(k)
+                    return str(v).strip() if v is not None and pd.notna(v) and str(v).strip() not in ("", "nan") else None
+
+                def _float(k):
+                    v = row.get(k)
+                    try: return float(v) if v is not None and pd.notna(v) else None
+                    except: return None
+
+                def _int(k):
+                    v = row.get(k)
+                    try: return int(float(v)) if v is not None and pd.notna(v) else None
+                    except: return None
+
+                def _bool(k):
+                    v = row.get(k)
+                    if v is None or (isinstance(v, float) and pd.isna(v)): return 0
+                    return 1 if str(v).strip().lower() in ("1", "true", "yes") else 0
+
+                tier_level    = _str("tier_level")
+                sole_source   = _bool("sole_source")
+                otd_rate      = _float("on_time_delivery_rate")
+                years_rel     = _int("years_in_relationship")
+                fin_health    = _str("financial_health")
+                notes_val     = _str("notes")
+                fill_rate     = _float("order_fill_rate")
+                audit_rate    = _float("audit_pass_rate")
+                improve_idx   = _float("improvement_index")
+                disruptions   = _int("disruption_frequency")
+                lt_var        = _str("lead_time_variability")
+                cyber         = _str("cyber_posture")
+                inv_buf       = _int("inventory_buffer_days")
+                has_rto       = _bool("has_rto_defined")
+
                 if existing:
                     conn.execute("""
                         UPDATE onboarded_suppliers SET
                             country=?, what_they_supply=?, criticality=?,
                             annual_spend_usd=?, spend_percentage=?, contract_expiry=?,
-                            category=?, updated_at=datetime('now')
+                            category=?, tier_level=?, sole_source=?,
+                            on_time_delivery_rate=?, years_in_relationship=?,
+                            financial_health=?, notes=?, order_fill_rate=?,
+                            audit_pass_rate=?, improvement_index=?, disruption_frequency=?,
+                            lead_time_variability=?, cyber_posture=?,
+                            inventory_buffer_days=?, has_rto_defined=?,
+                            updated_at=datetime('now')
                         WHERE id=?
                     """, (country, supply, criticality, spend_usd,
                           float(spend_pct) if spend_pct and pd.notna(spend_pct) else None,
-                          expiry, category, existing[0]))
+                          expiry, category, tier_level, sole_source, otd_rate, years_rel,
+                          fin_health, notes_val, fill_rate, audit_rate, improve_idx,
+                          disruptions, lt_var, cyber, inv_buf, has_rto, existing[0]))
                 else:
                     conn.execute("""
                         INSERT INTO onboarded_suppliers
                         (name, country, what_they_supply, criticality,
-                         annual_spend_usd, spend_percentage, contract_expiry, category)
-                        VALUES (?,?,?,?,?,?,?,?)
+                         annual_spend_usd, spend_percentage, contract_expiry, category,
+                         tier_level, sole_source, on_time_delivery_rate, years_in_relationship,
+                         financial_health, notes, order_fill_rate, audit_pass_rate,
+                         improvement_index, disruption_frequency, lead_time_variability,
+                         cyber_posture, inventory_buffer_days, has_rto_defined)
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                     """, (name, country, supply, criticality, spend_usd,
                           float(spend_pct) if spend_pct and pd.notna(spend_pct) else None,
-                          expiry, category))
+                          expiry, category, tier_level, sole_source, otd_rate, years_rel,
+                          fin_health, notes_val, fill_rate, audit_rate, improve_idx,
+                          disruptions, lt_var, cyber, inv_buf, has_rto))
                 saved += 1
             except Exception as e:
                 errors.append(f"Row {idx}: {e}")
@@ -600,18 +659,18 @@ def _save_to_audit(result: dict):
                     result["risk_score"], result["gate_decision"],
                 ))
             conn.commit()
-    except Exception:
-        pass   # non-fatal
+    except Exception as e:
+        logger.warning(f"_save_to_audit failed (non-fatal): {e}")
 
 @app.post("/analyze")
-def analyze(payload: Dict[str, Any] = None, _user: dict = Depends(require_auth)):
+def analyze(payload: Dict[str, Any] = Body(...), _user: dict = Depends(require_auth)):
     result = _orch("POST", "/analyze", json=payload, timeout=130)
     if "error" not in result:
         _save_to_audit(result)
     return result
 
 @app.post("/recommend")
-def recommend(payload: Dict[str, Any] = None, _user: dict = Depends(require_auth)):
+def recommend(payload: Dict[str, Any] = Body(...), _user: dict = Depends(require_auth)):
     return _orch("POST", "/recommend", json=payload, timeout=130)
 
 @app.get("/portfolio")
@@ -623,15 +682,9 @@ def portfolio(_user: dict = Depends(require_auth)):
         return {"summary": {}, "suppliers": [], "gate_breakdown": [],
                 "country_risk": [], "category_risk": []}
 
-    HIGH_THRESHOLD = 0.75
     scores     = [s["last_score"] for s in analysed]
     decisions  = [s.get("last_decision") or "" for s in analysed]
-
-    # Normalise decision strings (orchestrator uses underscores, e.g. REQUIRES_APPROVAL)
-    def _norm_dec(d: str) -> str:
-        return d.replace("_", " ").upper() if d else ""
-
-    normed = [_norm_dec(d) for d in decisions]
+    normed     = [_norm_dec(d) for d in decisions]
 
     # Summary KPIs
     total        = len(analysed)
@@ -654,7 +707,6 @@ def portfolio(_user: dict = Depends(require_auth)):
     ]
 
     # Gate breakdown for donut
-    from collections import defaultdict
     gate_counts = defaultdict(int)
     for d in normed:
         gate_counts[d or "UNKNOWN"] += 1
@@ -932,10 +984,11 @@ def download_supplier_document(
         ).fetchone()
     if not row:
         raise HTTPException(404, "Document not found")
+    safe_filename = urllib.parse.quote(row["filename"], safe="")
     return Response(
         content=bytes(row["file_data"]),
         media_type="application/octet-stream",
-        headers={"Content-Disposition": f'attachment; filename="{row["filename"]}"'},
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{safe_filename}"},
     )
 
 
@@ -950,12 +1003,11 @@ def supplier_login(data: SupplierLoginRequest):
             "SELECT * FROM supplier_users WHERE username=?",
             (data.username,),
         ).fetchone()
-    if not row:
-        raise HTTPException(401, "Invalid username or password")
-    ph = hashlib.sha256(data.password.encode()).hexdigest()
-    if ph != row["password_hash"]:
-        raise HTTPException(401, "Invalid username or password")
-    with _db() as conn:
+        if not row:
+            raise HTTPException(401, "Invalid username or password")
+        ph = hashlib.sha256(data.password.encode()).hexdigest()
+        if ph != row["password_hash"]:
+            raise HTTPException(401, "Invalid username or password")
         supplier = conn.execute(
             "SELECT name, country FROM onboarded_suppliers WHERE id=?",
             (row["supplier_id"],),
