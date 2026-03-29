@@ -767,10 +767,21 @@ export default function MySuppliers() {
     navigate('/analysis', {
       state: {
         prefill: {
-          company_name:  s.name,
-          country:       s.country,
-          single_source: Boolean(s.sole_source),
-          lead_time:     s.lead_time || 12,
+          company_name:          s.name,
+          country:               s.country,
+          single_source:         Boolean(s.sole_source),
+          lead_time:             s.lead_time || 12,
+          order_fill_rate:       s.order_fill_rate       ?? '',
+          audit_pass_rate:       s.audit_pass_rate       ?? '',
+          improvement_index:     s.improvement_index     ?? '',
+          disruption_frequency:  s.disruption_frequency  ?? '',
+          lead_time_variability: s.lead_time_variability ?? '',
+          cyber_posture:         s.cyber_posture         ?? '',
+          inventory_buffer_days: s.inventory_buffer_days ?? '',
+          has_rto_defined:       Boolean(s.has_rto_defined),
+          financial_health:      s.financial_health      ?? '',
+          on_time_delivery_rate: s.on_time_delivery_rate ?? '',
+          contract_expiry:       s.contract_expiry       ?? '',
         },
       },
     })

@@ -284,15 +284,25 @@ export default function SupplierAnalysis() {
     include_summary: true,
     include_recs:  false,
     w_geo: 38, w_news: 31, w_single: 16, w_lead: 15,
-    // Performance & compliance metrics (13-factor model)
-    order_fill_rate:       '',
-    lead_time_variability: '',
-    audit_pass_rate:       '',
-    improvement_index:     '',
-    cyber_posture:         '',
-    disruption_frequency:  '',
-    inventory_buffer_days: '',
-    has_rto_defined:       false,
+    // Core supplier fields — pre-filled from onboarded supplier record
+    financial_health:      prefill.financial_health      ?? '',
+    on_time_delivery_rate: prefill.on_time_delivery_rate !== '' && prefill.on_time_delivery_rate != null
+                             ? prefill.on_time_delivery_rate : '',
+    contract_expiry:       prefill.contract_expiry       ?? '',
+    // Performance & compliance metrics (13-factor model) — pre-filled from supplier record
+    order_fill_rate:       prefill.order_fill_rate       !== '' && prefill.order_fill_rate != null
+                             ? prefill.order_fill_rate : '',
+    lead_time_variability: prefill.lead_time_variability ?? '',
+    audit_pass_rate:       prefill.audit_pass_rate       !== '' && prefill.audit_pass_rate != null
+                             ? prefill.audit_pass_rate : '',
+    improvement_index:     prefill.improvement_index     !== '' && prefill.improvement_index != null
+                             ? prefill.improvement_index : '',
+    cyber_posture:         prefill.cyber_posture         ?? '',
+    disruption_frequency:  prefill.disruption_frequency  !== '' && prefill.disruption_frequency != null
+                             ? prefill.disruption_frequency : '',
+    inventory_buffer_days: prefill.inventory_buffer_days !== '' && prefill.inventory_buffer_days != null
+                             ? prefill.inventory_buffer_days : '',
+    has_rto_defined:       prefill.has_rto_defined       ?? false,
   })
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [showWeights, setShowWeights] = useState(() => {
@@ -358,6 +368,10 @@ export default function SupplierAnalysis() {
         include_summary:          form.include_summary,
         include_recommendations:  form.include_recs,
         ...(customWeights ? { custom_weights: customWeights } : {}),
+        // Core supplier fields — only send if filled
+        ...(form.financial_health      ? { financial_health:      form.financial_health }                          : {}),
+        ...(form.on_time_delivery_rate !== '' ? { on_time_delivery_rate: parseFloat(form.on_time_delivery_rate) } : {}),
+        ...(form.contract_expiry       ? { contract_expiry:       form.contract_expiry }                           : {}),
         // Performance & compliance metrics — only send if filled
         ...(form.order_fill_rate       !== '' ? { order_fill_rate:       parseFloat(form.order_fill_rate) }       : {}),
         ...(form.lead_time_variability !== '' ? { lead_time_variability: form.lead_time_variability }             : {}),
@@ -472,6 +486,19 @@ export default function SupplierAnalysis() {
           lead_time_weeks:         parseFloat(s.lead_time_weeks) || 12,
           include_summary:         batchIncludeSummary,
           include_recommendations: false,
+          // Core supplier fields
+          ...(s.financial_health                                   ? { financial_health:      s.financial_health }                              : {}),
+          ...(s.on_time_delivery_rate != null                      ? { on_time_delivery_rate: parseFloat(s.on_time_delivery_rate) }             : {}),
+          ...(s.contract_expiry                                    ? { contract_expiry:       s.contract_expiry }                               : {}),
+          // Performance & compliance metrics
+          ...(s.order_fill_rate       != null                      ? { order_fill_rate:       parseFloat(s.order_fill_rate) }                   : {}),
+          ...(s.lead_time_variability                              ? { lead_time_variability: s.lead_time_variability }                         : {}),
+          ...(s.audit_pass_rate       != null                      ? { audit_pass_rate:       parseFloat(s.audit_pass_rate) }                   : {}),
+          ...(s.improvement_index     != null                      ? { improvement_index:     parseFloat(s.improvement_index) }                 : {}),
+          ...(s.cyber_posture                                      ? { cyber_posture:         s.cyber_posture }                                 : {}),
+          ...(s.disruption_frequency  != null                      ? { disruption_frequency:  parseInt(s.disruption_frequency) }                : {}),
+          ...(s.inventory_buffer_days != null                      ? { inventory_buffer_days: parseInt(s.inventory_buffer_days) }               : {}),
+          ...(s.has_rto_defined                                    ? { has_rto_defined:       true }                                            : {}),
         })
         const r = res.data
         if (['HIGH', 'MEDIUM'].includes(r.risk_category)) highMedCount++
