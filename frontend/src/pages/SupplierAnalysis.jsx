@@ -30,7 +30,7 @@ const COUNTRIES = [
 
 // ── Risk colour helpers ───────────────────────────────────────────────────────
 const riskColor = (score) =>
-  score >= 0.75 ? '#EF4444' : score >= 0.45 ? '#F59E0B' : '#10B981'
+  score >= 0.65 ? '#EF4444' : score >= 0.40 ? '#F59E0B' : '#10B981'
 
 const decisionStyle = {
   BLOCKED:           { bg: 'bg-[#FEF2F2]', border: 'border-l-4 border-neu-risk-hi', text: 'text-neu-risk-hi',  label: 'BLOCKED — OFAC Sanctions Match' },
@@ -826,7 +826,7 @@ export default function SupplierAnalysis() {
                       <p className="text-[0.65rem] font-bold uppercase tracking-[1.2px] text-neu-muted mb-3">Score Gauge</p>
                       <RiskGauge score={result.risk_score} />
                       <p className="text-[0.7rem] text-neu-muted text-center mt-2">
-                        Approval threshold: {0.75} · Above this requires procurement sign-off
+                        Approval threshold: {0.65} · Above this requires procurement sign-off
                       </p>
                     </div>
                     <div>

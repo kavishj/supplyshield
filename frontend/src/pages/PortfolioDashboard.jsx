@@ -183,7 +183,7 @@ function TopRiskTable({ suppliers }) {
           <tbody>
             {top10.map((s, i) => {
               const score = s.score ?? 0
-              const scoreColor = score >= 0.75 ? '#EF4444' : score >= 0.45 ? '#F59E0B' : '#38B2AC'
+              const scoreColor = score >= 0.65 ? '#EF4444' : score >= 0.40 ? '#F59E0B' : '#38B2AC'
               return (
                 <tr key={i} className="border-t border-[rgba(163,177,198,0.2)] hover:bg-[rgba(163,177,198,0.04)] transition-colors">
                   <td className="py-2.5 pr-4 text-neu-muted font-semibold">{i + 1}</td>
@@ -281,7 +281,7 @@ export default function PortfolioDashboard() {
             <KpiCard value={reqApproval}              label="Needs Approval"      color="text-neu-risk-md" sub={pct(reqApproval, total)} />
             <KpiCard value={approved}                 label="Approved"            color="text-neu-teal"    sub={pct(approved, total)} />
             <KpiCard value={avgScore !== null ? avgScore.toFixed(3) : '—'} label="Avg Risk Score"  color="text-neu-accent" />
-            <KpiCard value={highRisk}                 label="High Risk (≥0.75)"   color="text-neu-risk-hi" sub={pct(highRisk, total)} />
+            <KpiCard value={highRisk}                 label="High Risk (≥0.65)"   color="text-neu-risk-hi" sub={pct(highRisk, total)} />
           </div>
 
           {/* ── World Map — sticky, fades into background on scroll ── */}

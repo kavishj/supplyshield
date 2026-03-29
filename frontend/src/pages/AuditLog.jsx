@@ -32,7 +32,7 @@ function StatCard({ value, label, color = 'text-neu-accent' }) {
 
 function ScoreBar({ score }) {
   const pct   = Math.min(Math.max(score * 100, 0), 100)
-  const color = score >= 0.75 ? '#EF4444' : score >= 0.45 ? '#F59E0B' : '#38B2AC'
+  const color = score >= 0.65 ? '#EF4444' : score >= 0.40 ? '#F59E0B' : '#38B2AC'
   return (
     <div className="flex items-center gap-2">
       <div className="w-16 h-1.5 rounded-full shadow-neu-in overflow-hidden">
@@ -302,7 +302,7 @@ export default function AuditLog() {
                               {Object.entries(entry.risk_components).map(([k, v]) => {
                                 const val = typeof v === 'number' ? v : 0
                                 const pct = Math.min(val * 100, 100)
-                                const col = val >= 0.75 ? '#EF4444' : val >= 0.45 ? '#F59E0B' : '#38B2AC'
+                                const col = val >= 0.65 ? '#EF4444' : val >= 0.40 ? '#F59E0B' : '#38B2AC'
                                 return (
                                   <div key={k} className="flex items-center gap-2">
                                     <span className="text-[0.68rem] text-neu-muted w-28 flex-shrink-0 capitalize">

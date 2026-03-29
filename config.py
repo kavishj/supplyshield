@@ -17,8 +17,8 @@ Import in app.py / utils/:
 from datetime import datetime
 
 # ── Risk Classification Thresholds ────────────────────────────
-HIGH_THRESHOLD   = 0.75   # score >= this → HIGH / REQUIRES_APPROVAL
-MEDIUM_THRESHOLD = 0.45   # score >= this → MEDIUM; below → LOW
+HIGH_THRESHOLD   = 0.65   # score >= this → HIGH / REQUIRES_APPROVAL
+MEDIUM_THRESHOLD = 0.40   # score >= this → MEDIUM; below → LOW
 
 # Gate uses the same value — explicit alias avoids magic numbers there
 GATE_APPROVAL_THRESHOLD = HIGH_THRESHOLD
@@ -73,6 +73,11 @@ EXPANDED_WEIGHTS = {
 CYBER_POSTURE_MAP = {"Poor": 0.85, "Fair": 0.40, "Good": 0.05}
 
 LEAD_TIME_VARIABILITY_MAP = {"Low": 0.0, "Medium": 0.40, "High": 0.80}
+
+# ── Supplier evaluation score maps ────────────────────────────
+NEWS_RISK_MAP        = {"HIGH": 0.8, "MEDIUM": 0.4, "LOW": 0.1, "NONE": 0.0}
+FINANCIAL_HEALTH_MAP = {"Poor": 0.85, "Fair": 0.45, "Good": 0.05}
+TIER_RISK_MAP        = {"Tier 1": 0.0, "Tier 2": 0.3, "Tier 3": 0.6}
 
 # ── OFAC Screening ────────────────────────────────────────────
 OFAC_SIMILARITY_THRESHOLD = 85    # % minimum fuzzy-match score (RapidFuzz token_set_ratio)

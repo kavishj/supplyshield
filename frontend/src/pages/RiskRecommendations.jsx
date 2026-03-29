@@ -15,8 +15,8 @@ const _gateKey = (d) => {
   return 'AUTO_APPROVED'
 }
 
-const HIGH_THRESHOLD   = 0.75
-const MEDIUM_THRESHOLD = 0.45
+const HIGH_THRESHOLD   = 0.65
+const MEDIUM_THRESHOLD = 0.40
 
 const riskColor = (score) =>
   score >= HIGH_THRESHOLD ? '#EF4444' : '#F59E0B'

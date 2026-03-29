@@ -7,7 +7,7 @@ import { useThemeStore } from '../stores/themeStore'
 
 const GEO_URL = 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json'
 
-const HIGH = 0.75, MED = 0.45
+const HIGH = 0.65, MED = 0.40
 const riskColor = (s) => s >= HIGH ? '#EF4444' : s >= MED ? '#F59E0B' : '#22C55E'
 
 // Country centroids [longitude, latitude]
