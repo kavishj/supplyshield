@@ -5,7 +5,8 @@ if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 from config import (COUNTRY_RISK, DEFAULT_WEIGHTS, ONBOARDED_WEIGHTS, EXPANDED_WEIGHTS,
                     HIGH_THRESHOLD, MEDIUM_THRESHOLD,
-                    CYBER_POSTURE_MAP, LEAD_TIME_VARIABILITY_MAP)
+                    CYBER_POSTURE_MAP, LEAD_TIME_VARIABILITY_MAP,
+                    NEWS_RISK_MAP, FINANCIAL_HEALTH_MAP, TIER_RISK_MAP)
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,9 +20,20 @@ logger = logging.getLogger("riskcalc")
 app = FastAPI(title="RiskCalculatorAgent", version="3.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-NEWS_RISK_MAP       = {"HIGH": 0.8, "MEDIUM": 0.4, "LOW": 0.1, "NONE": 0.0}
-FINANCIAL_HEALTH_MAP = {"Poor": 0.85, "Fair": 0.45, "Good": 0.05}
-TIER_RISK_MAP       = {"Tier 1": 0.0, "Tier 2": 0.3, "Tier 3": 0.6}
+# ── Percentage-based step scoring ─────────────────────────────
+_ON_TIME_TIERS     = [(95, 0.0),  (85, 0.2),  (70, 0.5),  (0, 0.85)]
+_FILL_RATE_TIERS   = [(95, 0.0),  (85, 0.20), (70, 0.55), (0, 0.90)]
+_AUDIT_TIERS       = [(90, 0.0),  (75, 0.30), (60, 0.60), (0, 0.90)]
+_IMPROVEMENT_TIERS = [(85, 0.0),  (65, 0.30), (45, 0.60), (0, 0.85)]
+
+
+def _pct_step_score(rate: float, tiers: list) -> float:
+    """Clamp rate to [0, 100] then return risk score from descending threshold tiers."""
+    rate = max(0.0, min(100.0, rate))
+    for threshold, score in tiers:
+        if rate >= threshold:
+            return score
+    return tiers[-1][1]
 
 
 def _lead_time_score(weeks: float) -> float:
@@ -33,11 +45,7 @@ def _lead_time_score(weeks: float) -> float:
 
 def _on_time_score(rate: float) -> float:
     """0-100% rate → 0.0–1.0 risk (lower on-time = higher risk)."""
-    rate = max(0.0, min(100.0, rate))   # clamp to valid range
-    if rate >= 95: return 0.0
-    if rate >= 85: return 0.2
-    if rate >= 70: return 0.5
-    return 0.85
+    return _pct_step_score(rate, _ON_TIME_TIERS)
 
 
 def _contract_expiry_score(days_remaining: Optional[int]) -> float:
@@ -52,11 +60,7 @@ def _contract_expiry_score(days_remaining: Optional[int]) -> float:
 
 def _fill_rate_score(rate: float) -> float:
     """Order fill rate / OTIF 'in-full' %  →  0.0–1.0 risk."""
-    rate = max(0.0, min(100.0, rate))
-    if rate >= 95: return 0.0
-    if rate >= 85: return 0.20
-    if rate >= 70: return 0.55
-    return 0.90
+    return _pct_step_score(rate, _FILL_RATE_TIERS)
 
 
 def _lead_time_variability_score(variability: str) -> float:
@@ -66,20 +70,12 @@ def _lead_time_variability_score(variability: str) -> float:
 
 def _audit_pass_rate_score(rate: float) -> float:
     """Compliance audit pass rate %  →  0.0–1.0 risk."""
-    rate = max(0.0, min(100.0, rate))
-    if rate >= 90: return 0.0
-    if rate >= 75: return 0.30
-    if rate >= 60: return 0.60
-    return 0.90
+    return _pct_step_score(rate, _AUDIT_TIERS)
 
 
 def _improvement_index_score(rate: float) -> float:
     """Corrective-action closure rate %  →  0.0–1.0 risk."""
-    rate = max(0.0, min(100.0, rate))
-    if rate >= 85: return 0.0
-    if rate >= 65: return 0.30
-    if rate >= 45: return 0.60
-    return 0.85
+    return _pct_step_score(rate, _IMPROVEMENT_TIERS)
 
 
 def _cyber_posture_score(posture: str) -> float:
@@ -157,18 +153,18 @@ def score(req: ScoreRequest):
     }
 
     # ── Determine which weight set to use ─────────────────────
-    has_extended = any([
-        req.financial_health is not None,
-        req.on_time_delivery_rate is not None,
-        req.contract_days_remaining is not None,
+    has_extended = any(x is not None for x in [
+        req.financial_health,
+        req.on_time_delivery_rate,
+        req.contract_days_remaining,
     ])
-    has_expanded = any([
-        req.order_fill_rate is not None,
-        req.lead_time_variability is not None,
-        req.audit_pass_rate is not None,
-        req.improvement_index is not None,
-        req.cyber_posture is not None,
-        req.disruption_frequency is not None,
+    has_expanded = any(x is not None for x in [
+        req.order_fill_rate,
+        req.lead_time_variability,
+        req.audit_pass_rate,
+        req.improvement_index,
+        req.cyber_posture,
+        req.disruption_frequency,
     ])
 
     if req.custom_weights:
@@ -180,7 +176,7 @@ def score(req: ScoreRequest):
                 "order_fill_rate", "lead_time_variability", "audit_pass_rate",
                 "improvement_index", "cyber_posture", "disruption_frequency",
             }
-            active_fixed = {k: EXPANDED_WEIGHTS[k] for k in NEW_METRIC_KEYS if k in components}
+            active_fixed = {k: EXPANDED_WEIGHTS[k] for k in NEW_METRIC_KEYS}
             fixed_total  = sum(active_fixed.values())
             remaining    = max(0.01, 1.0 - fixed_total)
             custom_total = sum(raw_custom.values())

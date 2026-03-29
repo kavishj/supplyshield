@@ -13,11 +13,11 @@ from pydantic import BaseModel
 import requests, time, logging, os, json, sqlite3
 from typing import Optional
 from dotenv import load_dotenv
-from datetime import date
-
-DB_PATH = Path(os.getenv("DB_PATH", r"C:\Users\KAVISH\supplyshield_final\data\suppliers.db"))
+from datetime import date, datetime
 
 load_dotenv(override=False)
+
+DB_PATH = Path(os.getenv("DB_PATH", r"C:\Users\KAVISH\supplyshield_final\data\suppliers.db"))
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("orchestrator")
@@ -107,6 +107,15 @@ def call_agent(url: str, payload: dict, timeout: int = 15) -> dict:
 
 
 # ── DB helpers ────────────────────────────────────────────────
+def _safe_json(val, default: str):
+    """Safely decode a JSON string from the DB, returning a parsed default on failure."""
+    try:
+        return json.loads(val or default)
+    except (json.JSONDecodeError, TypeError):
+        logger.warning(f"Corrupted JSON in recommendations DB, using default: {val!r}")
+        return json.loads(default)
+
+
 def _ensure_recommendations_table():
     conn = sqlite3.connect(DB_PATH)
     conn.execute("""
@@ -128,9 +137,13 @@ def _ensure_recommendations_table():
     conn.close()
 
 
+@app.on_event("startup")
+def _startup():
+    _ensure_recommendations_table()
+
+
 def save_recommendation(supplier_name: str, risk_score: float, risk_category: str,
                         rec_result: dict):
-    _ensure_recommendations_table()
     conn = sqlite3.connect(DB_PATH)
     # Upsert: delete old, insert new
     conn.execute("DELETE FROM recommendations WHERE UPPER(supplier_name) = UPPER(?)",
@@ -156,7 +169,6 @@ def save_recommendation(supplier_name: str, risk_score: float, risk_category: st
 
 
 def get_recommendation(supplier_name: str) -> Optional[dict]:
-    _ensure_recommendations_table()
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     row = conn.execute(
@@ -167,13 +179,6 @@ def get_recommendation(supplier_name: str) -> Optional[dict]:
     if not row:
         return None
     r = dict(row)
-    def _safe_json(val, default):
-        try:
-            return json.loads(val or default)
-        except (json.JSONDecodeError, TypeError):
-            logger.warning(f"Corrupted JSON in recommendations DB, using default: {val!r}")
-            return json.loads(default)
-
     r["immediate_actions"] = _safe_json(r.get("immediate_actions"), "[]")
     r["long_term_actions"]  = _safe_json(r.get("long_term_actions"),  "[]")
     r["web_sources"]        = _safe_json(r.get("web_sources"),         "[]")
@@ -211,7 +216,6 @@ def _contract_days_remaining(expiry_str: Optional[str]) -> Optional[int]:
     if not expiry_str:
         return None
     try:
-        from datetime import datetime
         exp = datetime.strptime(expiry_str, "%Y-%m-%d").date()
         return (exp - date.today()).days
     except Exception:
@@ -254,6 +258,7 @@ def batch_analyze():
     conn.close()
 
     results, errors = [], []
+    write_conn = sqlite3.connect(DB_PATH)
 
     for supplier in suppliers:
         try:
@@ -275,14 +280,11 @@ def batch_analyze():
                 "ofac_status":   geo["status"],
             }, timeout=15).json()
 
-            conn = sqlite3.connect(DB_PATH)
-            conn.execute("""
+            write_conn.execute("""
                 UPDATE suppliers
                 SET last_screened = datetime('now'), last_score = ?, last_decision = ?
                 WHERE id = ?
             """, (risk["score"], gate["decision"], supplier["id"]))
-            conn.commit()
-            conn.close()
 
             results.append({
                 "id":             supplier["id"],
@@ -299,6 +301,8 @@ def batch_analyze():
         except Exception as e:
             errors.append({"supplier": supplier["name"], "error": str(e)})
 
+    write_conn.commit()
+    write_conn.close()
     results.sort(key=lambda x: x["risk_score"], reverse=True)
     return {
         "total_screened":    len(results),
@@ -588,7 +592,6 @@ def get_recommendations(supplier_name: str):
 @app.post("/recommendations/{supplier_name}/action_status")
 def update_action_status(supplier_name: str, body: dict):
     """body: {"action_id": "immediate_0", "completed": true}"""
-    _ensure_recommendations_table()
     rec = get_recommendation(supplier_name)
     if not rec:
         return {"error": "No recommendation found"}
@@ -628,10 +631,10 @@ def get_risky_suppliers():
     result = []
     for row in rows:
         d = dict(row)
-        d["immediate_actions"] = json.loads(d.get("immediate_actions") or "[]")
-        d["long_term_actions"]  = json.loads(d.get("long_term_actions")  or "[]")
-        d["web_sources"]        = json.loads(d.get("web_sources")         or "[]")
-        d["action_status"]      = json.loads(d.get("action_status")       or "{}")
+        d["immediate_actions"] = _safe_json(d.get("immediate_actions"), "[]")
+        d["long_term_actions"]  = _safe_json(d.get("long_term_actions"),  "[]")
+        d["web_sources"]        = _safe_json(d.get("web_sources"),         "[]")
+        d["action_status"]      = _safe_json(d.get("action_status"),       "{}")
         result.append(d)
 
     return {"total": len(result), "suppliers": result}
